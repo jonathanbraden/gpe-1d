@@ -19,7 +19,7 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #define FOURIER T
-!#define DIFF T
+#define DIFF T
 #define FIELD_TYPE Field_Model
 module eom
   use constants
@@ -28,11 +28,12 @@ module eom
 #endif
   implicit none
 
-  integer, parameter :: nFld = 2, nLat = 32
-  integer, parameter :: nVar = 2*nFld*nLat
+  integer, parameter :: nFld = 2, nLat = 256
+  integer, parameter :: nVar = 2*nFld*nLat+1
   real(dl), dimension(1:nVar), target :: yvec
   real(dl), parameter :: len = 80._dl, dx = len/dble(nLat), dk = twopi/len
-  real(dl), parameter :: mu = 0.1_dl, gs = 0.1_dl, gc = 0._dl, nu = 0.1_dl
+  real(dl), parameter :: mu = 0.1_dl, gs = 0.1_dl, gc = 0.02_dl, nu = 0.1_dl
+  real(dl), parameter :: del=0.5_dl, omega=50._dl
   real(dl), dimension(1:nFld,1:nFld), parameter :: lam = reshape( (/ gs, gc, gc, gs /), [nFld,nFld] )
 
 #ifdef FOURIER
@@ -72,7 +73,7 @@ contains
     if ( present(mu_i) )       mu = mu_i
     if ( present(g_i) )  then; do i=1,nFld; lam(i,i) = g_i; enddo; endif
     if ( present(gc_i) ) then; endif  ! Finish this one
-    if ( present(nu_i) ) then; nu = nu_i; do i=1,nFld; nu(i,i) = 0.1_dl; enddo; endif
+    if ( present(nu_i) ) then; nu = nu_i; do i=1,nFld; nu(i,i) = 0._dl; enddo; endif
   end subroutine set_model_params_simple
   
   subroutine set_model_params(mu_i,g_i,nu_i)
@@ -137,12 +138,14 @@ contains
   subroutine derivs(yc,yp)
     real(dl), dimension(:), intent(in) :: yc
     real(dl), dimension(:), intent(out) :: yp
-    
+
+    real(dl) :: nueff
     real(dl), dimension(1:nLat,1:nFld) :: ysq
     ysq(:,1) = yc(R1)**2 + yc(I1)**2
     ysq(:,2) = yc(R2)**2 + yc(I2)**2
 
-!    yp(TIND) = 1._dl  ! Uncomment to track time as a variable
+    yp(TIND) = 1._dl  ! Uncomment to track time as a variable
+    nueff = nu*(1._dl + del*sin(omega*yc(TIND)))
     
     ! These are ugly, add some default vectors so vectorisation can be done more easily
     yp(R1) = -mu*yc(I1) + ( lam(1,1)*ysq(:,1) + lam(1,2)*ysq(:,2) )*yc(I1) ! -laplacian(I1)
@@ -150,10 +153,10 @@ contains
     yp(R2) = -mu*yc(I2) + ( lam(2,1)*ysq(:,1) + lam(2,2)*ysq(:,2) )*yc(I2)  ! -laplacian(I2)
     yp(I2) = mu*yc(R2)  - ( lam(2,1)*ysq(:,1) + lam(2,2)*ysq(:,2) )*yc(R2) ! + laplacian(R2)
 
-    yp(R1) = yp(R1) - nu*yc(I2)
-    yp(I1) = yp(I1) + nu*yc(R2)
-    yp(R2) = yp(R2) - nu*yc(I1)
-    yp(I2) = yp(I2) + nu*yc(R1)
+    yp(R1) = yp(R1) - nueff*yc(I2)
+    yp(I1) = yp(I1) + nueff*yc(R2)
+    yp(R2) = yp(R2) - nueff*yc(I1)
+    yp(I2) = yp(I2) + nueff*yc(R1)
 
     ! Fourier based differentiation
     ! Need to add Chebyshev in here
