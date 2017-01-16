@@ -117,8 +117,8 @@ contains
     complex(C_DOUBLE_COMPLEX), allocatable :: Fk(:)
     type(C_PTR) :: fft_plan
 
-    if (.not.present(sym_in)) then; print*,"here ";symmetry = 0;endif
-    print*,"symmetry is ",symmetry
+    symmetry = 0
+    if (present(sym_in)) symmetry = sym_in
     
     nlat = size(field); nn = nlat/2 + 1
     if (nn /= size(spectrum)) then
@@ -133,13 +133,12 @@ contains
        print*,"Error, random number generator not initialized.  Call initialize_rand, using default seed values"
        call initialize_rand(75,13)
     endif
-
-    print*,"allocating Fk"
+    
     allocate(Fk(1:nn))
     fft_plan = fftw_plan_dft_c2r_1d(nlat, Fk, field, FFTW_ESTIMATE)
 
     if (.not.seed_init) then
-       print*,"Error, random number generator not initialized.  Call initialize_rand, using default seed values"
+       print*,"Error, random number generator not initialized.  Calling initialize_rand, using default seed values"
        call initialize_rand(75,13)
     endif
 
