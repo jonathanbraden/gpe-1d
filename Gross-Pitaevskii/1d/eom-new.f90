@@ -31,16 +31,16 @@ module eom
 #endif
   implicit none
 
-  integer, parameter :: nFld = 2, nLat = 1024
+  integer, parameter :: nFld = 2, nLat = 512
   integer, parameter :: nVar = 2*nFld*nLat+1
   real(dl), dimension(1:nVar), target :: yvec
-  real(dl), parameter :: len = 4.*50._dl / (2.*(2.e-3)**0.5), dx = len/dble(nLat), dk = twopi/len
+  real(dl), parameter :: len = 50._dl / (2.*(2.e-3)**0.5), dx = len/dble(nLat), dk = twopi/len
   
 !  real(dl), parameter :: mu = 0.1_dl, gs = 0.1_dl, gc = 0.02_dl, nu = 0.1_dl
 !  real(dl), parameter :: gs=1._dl, gc=0._dl, nu=0.01_dl, mu=1._dl-nu
-  real(dl), parameter :: nu = 2.e-3, mu=1._dl+nu, rho = 1000._dl
+  real(dl), parameter :: nu = 2.e-3, mu=1._dl+nu, rho = 16.*1000._dl*2._dl*(nu)**0.5
   real(dl), parameter :: omega = 50._dl*2._dl*nu**0.5, gc=0._dl, gs=1._dl
-  real(dl), parameter :: del = 1._dl/(2._dl*nu)**0.5 * (1._dl+0.15_dl)
+  real(dl), parameter :: del = (nu/2._dl)**0.5 * (1._dl+0.3_dl)
 !  real(dl), parameter :: del=7.1_dl, omega=50._dl  ! del = 0.5_dl, gs = 0.1_dl for other behaviour
   real(dl), dimension(1:nFld,1:nFld), parameter :: lam = reshape( (/ gs, gc, gc, gs /), [nFld,nFld] )
 !  real(dl), parameter :: rho = 1000._dl
@@ -167,7 +167,7 @@ contains
     ysq(:,2) = yc(R2)**2 + yc(I2)**2
 
     yp(TIND) = 1._dl  ! Uncomment to track time as a variable
-    nueff = nu*(1._dl + del*omega*cos(omega*yc(TIND)))
+    nueff = nu + del*omega*cos(omega*yc(TIND))
     
     ! These are ugly, add some default vectors so vectorisation can be done more easily
     yp(R1) = -mu*yc(I1) + ( lam(1,1)*ysq(:,1) + lam(1,2)*ysq(:,2) )*yc(I1) ! -laplacian(I1)

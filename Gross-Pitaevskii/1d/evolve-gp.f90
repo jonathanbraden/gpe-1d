@@ -6,13 +6,14 @@ program Gross_Pitaevskii_1d
   use integrator
   implicit none
   real(dl), dimension(:,:,:), pointer :: fld
+  real(dl) :: dtout_, dt_
   
   fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
   call initialise_fields(fld)
   call setup(nVar)
   call output_fields(fld)
 !  call time_evolve(0.2_dl/omega,80000,800)
-  call time_evolve(0.2_dl/omega,3200,800)
+  call time_evolve(0.25*0.1_dl/omega,80000,200)
   
 contains
 
@@ -53,12 +54,12 @@ contains
     integer :: i,j
     
     spec = 0._dl
-    !    do i=2,nLat/4
-    do i=nLat/4-4,nLat/4
-       spec(i) = 100._dl / (sqrt(len*rho))
+    do i=2,nLat/2
+    !do i=nLat/4-4,nLat/4
+       spec(i) = 1._dl / (sqrt(len*rho))
     enddo
     do i = 1,nFld; do j=1,2
-       call generate_1dGRF(df,spec,.false.)
+       call generate_1dGRF(df,spec(1:128),.false.)
        fld(:,i,j) = fld(:,i,j) + df
     enddo; enddo
   end subroutine initialise_fluctuations
@@ -93,6 +94,7 @@ contains
     
     outsize = ns/no; nums = ns/outsize
     print*,"dt out is ",dt*outsize
+    dt_ = dt; dtout_ = dt*outsize
     do i=1,nums
        do j=1,outsize
           call gl10(yvec,dt)
@@ -104,15 +106,19 @@ contains
   subroutine output_fields(fld)
     real(dl), dimension(:,:,:), intent(in) :: fld
     logical :: o; integer :: i
-
+    integer, parameter :: oFile = 99
+    
     inquire(file='fields.dat',opened=o)
-    if (.not.o) open(unit=99,file='fields.dat')
-
+    if (.not.o) then
+       open(unit=oFile,file='fields.dat')
+       write(oFile,*) "# n = ",nLat," dx = ",dx," dt = ",dt_, " dt_out = ",dtout_
+    endif
+       
     ! Fix this if I change array orderings
     do i=1,nLat
-       write(99,*) fld(i,:,:)
+       write(oFile,*) fld(i,:,:)
     enddo
-    write(99,*)
+    write(oFile,*)
     
   end subroutine output_fields
   
