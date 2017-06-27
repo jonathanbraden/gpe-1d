@@ -11,7 +11,8 @@ program Gross_Pitaevskii_1d
   call initialise_fields(fld)
   call setup(nVar)
   call output_fields(fld)
-  call time_evolve(0.4_dl/omega,4000,100)
+!  call time_evolve(0.2_dl/omega,80000,800)
+  call time_evolve(0.2_dl/omega,3200,800)
   
 contains
 
@@ -43,17 +44,18 @@ contains
     real(dl), dimension(:,:,:), intent(out) :: fld
     real(dl), intent(in) :: rho
     fld(:,1,1) =  rho; fld(:,2,1) = 0._dl
-    fld(:,1,2) = rho; fld(:,2,2) = 0._dl
+    fld(:,1,2) = -rho; fld(:,2,2) = 0._dl
   end subroutine initialise_mean_fields
 
   subroutine initialise_fluctuations(fld)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     real(dl) :: df(1:nLat), spec(1:nLat/2+1)
     integer :: i,j
-
+    
     spec = 0._dl
-    do i=1,nLat/4
-       spec = 0.1_dl / sqrt(len)
+    !    do i=2,nLat/4
+    do i=nLat/4-4,nLat/4
+       spec(i) = 100._dl / (sqrt(len*rho))
     enddo
     do i = 1,nFld; do j=1,2
        call generate_1dGRF(df,spec,.false.)
@@ -67,8 +69,8 @@ contains
     integer :: i; real(dl) :: dt, theta
     
     call initialise_mean_fields(fld,rho)
-    !yvec(4*nLat+1) = 0._dl ! Add a tcur pointer here
-    
+    yvec(4*nLat+1) = 0._dl ! Add a tcur pointer here
+!#define SW_INIT T
 #ifdef SW_INIT
     dt = twopi / dble(nLat)
     fld(:,1,1) = rho; fld(:,2,1) = 0._dl
@@ -76,8 +78,9 @@ contains
        theta = (i-1)*dt
        fld(i,1,2) = rho*cos(theta); fld(i,2,2) = rho*sin(theta)
     enddo
-#endif    
+#else
     call initialise_fluctuations(fld)
+#endif
   end subroutine initialise_fields
   
   subroutine time_evolve(dt,ns,no)
@@ -85,10 +88,11 @@ contains
     integer, intent(in) :: ns, no
     integer :: i,j, outsize, nums
 
-    print*,"dx is ", dx
+    print*,"dx is ", dx, "dt is ",dt
     if (dt > dx**2) print*,"Warning, violating Courant condition"
     
     outsize = ns/no; nums = ns/outsize
+    print*,"dt out is ",dt*outsize
     do i=1,nums
        do j=1,outsize
           call gl10(yvec,dt)
