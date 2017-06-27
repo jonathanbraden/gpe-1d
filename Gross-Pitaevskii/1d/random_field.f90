@@ -109,9 +109,10 @@ contains
     logical, intent(in) :: convolve
     integer, optional :: sym_in
     integer, optional :: initStride
-
+    
     integer :: symmetry
-    integer :: nlat, nn, stride
+    integer :: nlat, nn, stride, nnk
+    logical :: cut
     real(dl), allocatable, dimension(:) :: amp, phase
     complex(dl), allocatable, dimension(:) :: deviate
     complex(C_DOUBLE_COMPLEX), allocatable :: Fk(:)
@@ -120,14 +121,14 @@ contains
     symmetry = 0
     if (present(sym_in)) symmetry = sym_in
     
-    nlat = size(field); nn = nlat/2 + 1
-    if (nn /= size(spectrum)) then
-       print*,"Warning size of spectrum is not equal to the number of required Fourier modes in 1dGRF.  Will be fixed by passing a function in a future release."
-       stop
+    nlat = size(field); nn = nlat/2 + 1; nnk = size(spectrum); cut = .false.
+    if (nn > nnk) then
+       print*,"Warning spectrum is smaller than the number of required Fourier modes in 1dGRF.  Additional high frequency modes will not be sampled."
+       cut = .true.
     endif
 
-    if (.not.present(initStride)) then; stride = nn; else; stride = initStride; endif
-    if ( stride > nn ) then; print*,"Stride is larger than number of Fourier modes.  Setting to nyquist"; stride = nn; endif
+    if (.not.present(initStride)) then; stride = nnk; else; stride = initStride; endif
+    if ( stride > nnk ) then; print*,"Stride is larger than number of Fourier modes.  Setting to nyquist"; stride = nnk; endif
 
     if (.not.seed_init) then
        print*,"Error, random number generator not initialized.  Call initialize_rand, using default seed values"
@@ -144,11 +145,11 @@ contains
 
 ! Generate Gaussian random deviates using Box-Muller
     ! Normalization chosen so that < Re(x)^2+Im(x)^2 > = 1
-    allocate( amp(1:nn),phase(1:nn),deviate(1:nn) )
+    allocate( amp(1:nnk),phase(1:nnk),deviate(1:nnk) )
     
     call random_number(amp(1:stride)); call random_number(phase(1:stride))
-    if (stride < nn) then; call random_number( amp(stride+1:nn) ); call random_number( phase(stride+1:nn) ); endif
-
+    if (stride < nnk) then; call random_number( amp(stride+1:nnk) ); call random_number( phase(stride+1:nnk) ); endif
+       
     select case (symmetry)
      case (1)
        deviate = dreal( sqrt(-2.*log(amp))*exp(iImag*twopi*phase) )
@@ -163,8 +164,9 @@ contains
        print*,"Convolution based algorithm not yet implemented in 1D"
        print*,"Regenerate 1D random field using Fourier based algorithm"
     else
-       Fk(:) = deviate * spectrum
+       Fk(1:nnk) = deviate * spectrum
        Fk(1) = 0.
+       Fk(nnk+1:nn) = 0._dl
        call fftw_execute_dft_c2r(fft_plan, Fk, field)
     endif
   end subroutine generate_1dGRF
