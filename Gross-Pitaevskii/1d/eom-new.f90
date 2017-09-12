@@ -34,48 +34,119 @@ module eom
   integer, parameter :: nFld = 2, nLat = 512
   integer, parameter :: nVar = 2*nFld*nLat+1
   real(dl), dimension(1:nVar), target :: yvec
-  real(dl), parameter :: len = 50._dl / (2.*(2.e-3)**0.5), dx = len/dble(nLat), dk = twopi/len
+
+  ! Parameters for 2-field model in "scalar field" normalisation
+  real(dl) :: nu_s
+  real(dl), parameter :: omega_s = 50._dl*1., rho_s=1000._dl, del_s= 1._dl + 0.3_dl
+  real(dl), parameter :: len_s=50._dl
+
+  real(dl), parameter :: nu = 2.e-3, mu=1._dl+nu, rho = rho_s*2._dl*(nu)**0.5
+  real(dl), parameter :: omega = omega_s*2._dl*nu**0.5, gc=0.1_dl, gs=1._dl, dg=0.43_dl
+  real(dl), parameter :: del = (nu/2._dl)**0.5 * del_s
+  real(dl), parameter :: delm = 0._dl  ! Mass difference
   
-!  real(dl), parameter :: mu = 0.1_dl, gs = 0.1_dl, gc = 0.02_dl, nu = 0.1_dl
-!  real(dl), parameter :: gs=1._dl, gc=0._dl, nu=0.01_dl, mu=1._dl-nu
-  real(dl), parameter :: nu = 2.e-3, mu=1._dl+nu, rho = 16.*1000._dl*2._dl*(nu)**0.5
-  real(dl), parameter :: omega = 50._dl*2._dl*nu**0.5, gc=0._dl, gs=1._dl
-  real(dl), parameter :: del = (nu/2._dl)**0.5 * (1._dl+0.3_dl)
-!  real(dl), parameter :: del=7.1_dl, omega=50._dl  ! del = 0.5_dl, gs = 0.1_dl for other behaviour
-  real(dl), dimension(1:nFld,1:nFld), parameter :: lam = reshape( (/ gs, gc, gc, gs /), [nFld,nFld] )
-!  real(dl), parameter :: rho = 1000._dl
+  real(dl), parameter, dimension(1:nFld) :: m = (/ 1._dl, 1._dl /)
+  real(dl), dimension(1:nFld,1:nFld), parameter :: lam = reshape( (/ gs+0.5_dl*dg, gc, gc, gs-0.5_dl*dg /), [nFld,nFld] )
   
+  real(dl), parameter :: len = len_s / (2.*(nu)**0.5), dx = len/dble(nLat), dk = twopi/len
   ! Drummond parameters
   real(dl) :: nu_scl, rho_scl, delm_scl, lam_scl, omega_scl 
   
 #ifdef FOURIER
   type(transformPair1D) :: tPair
 #endif
-
-  type Grid_Params
-     integer :: nLat
-     real(dl) :: len, dx, dk
-  end type Grid_Params
-
-  type Model_Params
-     integer :: nFld
-     real(dl), dimension(:,:), allocatable :: lam, nu
-     real(dl), dimension(:), allocatable :: mass
-     real(dl) :: mu
-  end type Model_Params
-  
-  type FIELD_TYPE
-     integer :: nx
-     integer :: nfld, nvar
-     real(dl) :: len, dx, dk
-     real(dl), dimension(:), allocatable :: yvec
-     ! Add a pointer to reshape the variables for ease of coding
-  end type FIELD_TYPE
-
-  type(Model_Params) :: params
   
 contains
 
+#ifdef MODDED
+  !>@brief
+  !> Allocate storage space for the field lattice variables and parameters of the lattice
+  subroutine create_field_lattice(this,n,nf,len)
+    type(FIELD_TYPE), intent(out) :: this
+    integer, intent(in) :: n, nf
+    real(dl), intent(in) :: len
+
+    this%nx = n; this%nfld = nf
+    this%len = len
+    this%dx = len / dble(n); this%dk = twopi / len
+    this%nvar = 2*nfld*n
+    allocate(this%yvec(1:nvar))
+  end subroutine create_field_lattice
+#endif
+  ! Rather than hardcoding parameters above, use this subroutine
+  subroutine initialise_field(n)
+    integer, intent(in) :: n
+    !call initialise_transform_1d(tPair,n)
+  end subroutine initialise_field
+  
+  !>@brief
+  !> Converts the dimensionless coupling constants from those associated with the scalar potential
+  !> \f[
+  !>    \hbar\omega_p = 2\sqrt{\nu gn} \qquad c_p^2 = \frac{gn}{m} \qquad \kappa_p = c_p^{-1}\omega_p
+  !> \f]
+  !> to the "condensate" time units used in this code
+  !> \f[ 
+  !>   \hbar\omega_p = gn \qquad c_p^2 = \frac{gn}{m} \qquad \kappa_p = c_p^{-1}\omega_p
+  !> \f]
+  !>
+  !> To Do: Rename this to convert from scalar potential
+  !>  Will need, V_0 = w_0^2, lambda, and tilde(nu), etc
+  subroutine convert_units_scalar_to_condensate(nu_b,l_d,w_d,rho_d,lam_d)
+    real(dl), intent(in) :: nu_b, l_d, w_d, rho_d, lam_d
+    real(dl) :: w_c, l_c, rho_c, del_c
+    
+    w_c = w_d * 2._dl*(nu_b)**0.5
+    l_c = l_d / (2._dl*nu_b**0.5)
+    rho_c = rho_d * 2._dl*(nu_b)**0.5
+    del_c = (nu_b/2._dl)**0.5*lam_d
+  end subroutine convert_units_scalar_to_condensate
+
+  !>@brief
+  !> Convert dimensionless units from those associated with the condensate to those associated with the scalar field.
+  !> Performs the inverse operation to convert_units_scalar_to_condensate.
+  !>
+  !>@todo
+  !> Write this
+  subroutine convert_units_condensate_to_scalar(nu_b,del_c,rho_c,l_c,w_c)
+    real(dl), intent(in) :: nu_b, del_c, rho_c, l_c, w_c
+    real(dl) :: w_s, l_s, rho_s, lam_s
+
+    w_s = 0.5_dl*w_c / nu_b**0.5
+    l_s = l_c*(2._dl*nu_b)**0.5
+    rho_s = 0.5_dl*rho_c/(nu_b)**0.5
+    lam_s = del_c*(2._dl/nu_b)**0.5
+  end subroutine convert_units_condensate_to_scalar
+  
+  subroutine set_model_params_2fld(g_i,dg_i,gc_i,nu_i)
+    real(dl), intent(in), optional :: g_i, dg_i, gc_i, nu_i
+    real(dl) :: g_t, dg_t, gc_t, nu_t
+
+    g_t = 0._dl; dg_t = 0._dl; gc_t = 0._dl; nu_t = 0._dl
+    ! Add all the appropriate if statements
+  end subroutine set_model_params_2fld
+
+  !>@brief
+  !> Solve the background condensate densities in the 2-field model
+  function background_densities(dg) result(n)
+    real(dl), intent(in) :: dg
+    real(dl), dimension(1:nFld) :: n
+    n = 1._dl  ! Fix this to actually solve
+  end function background_densities
+
+! Derivatives of potential with respect to theta for computing mean densities by Newton's method
+  function dVdTheta(x) result(dv)
+    real(dl), intent(in) :: x
+    real(dl) :: dv
+
+    dv = cos(2._dl*x)*(sin(2._dl*x) + 4._dl*nu) + sin(2._dl*x)*dg
+  end function dVdTheta
+
+  function d2Vd2Theta(x) result(d2v)
+    real(dl), intent(in) :: x
+    real(dl) :: d2v
+    
+  end function d2Vd2Theta
+  
 #ifdef ADJUST
   !>@brief
   !> Set the parameters of the Bose-Condensates assuming the simplified situation of equal couplings
@@ -102,39 +173,6 @@ contains
     real(dl), intent(in) :: nu_i, rho_i, lam_i, omega_i 
     nu_scl = nu_i; rho_scl = rho_i; lam_scl = lam_i; omega_scl = omega_i
   end subroutine set_drummond_params
-  
-  type(Model_Params) function new_model_params(nf) result(this)
-    integer, intent(in) :: nf
-    allocate( this%lam(1:nf,1:nf),this%nu(1:nf,1:nf) )
-    allocate( this%mass(1:nf) )
-  end function new_model_params
-  
-  subroutine create_model_params(this,nf)
-    type(Model_Params), intent(out) :: this
-    integer, intent(in) :: nf
-    this%nFld = nf
-    allocate( this%lam(1:nf,1:nf), this%nu(1:nf,1:nf) )
-  end subroutine create_model_params
-  
-  !>@brief
-  !> Allocate storage space for the field lattice variables and parameters of the lattice
-  subroutine create_field_lattice(this,n,nf,len)
-    type(FIELD_TYPE), intent(out) :: this
-    integer, intent(in) :: n, nf
-    real(dl), intent(in) :: len
-
-    this%nx = n; this%nfld = nf
-    this%len = len
-    this%dx = len / dble(n); this%dk = twopi / len
-    this%nvar = 2*nfld*n
-    allocate(this%yvec(1:nvar))
-  end subroutine create_field_lattice
-
-  ! Rather than hardcoding parameters above, use this subroutine
-  subroutine initialise_field(n)
-    integer, intent(in) :: n
-    !call initialise_transform_1d(tPair,n)
-  end subroutine initialise_field
   
 #define R1 1:nLat
 #define I1 (nLat+1):(2*nLat)
@@ -219,6 +257,20 @@ contains
 #endif
   end subroutine derivs
 
+  !>@brief
+  !> Solve coupled GPE for the simplified case of a symmetric 2 BEC experiment
+  !>
+  !> Solve the equations of motion for two symmetric coupled BECs.
+  !> The Gross-Pitaevskii equations are solved in the linear complex basis, with the equations given by
+  !> \f[
+  !>    i\hbar\frac{d\psi_i}{dt} = \left-\frac{\hbar^2}{2m}\nabla^2 - g|\psi_i|^2 - g_c|\psi_{3-i}|^2 - \mu\right)\psi_i - \nu\psi_{3-j}
+  !> \f]
+  !> with the masses \f$m\f$ and self-couplings \f$g_{11} = g_{22} \equiv g\f$ assumed to be equal
+  subroutine derivs_symmetric(yc,yp)
+    real(dl), dimension(:), intent(in) :: yc
+    real(dl), dimension(:), intent(out) :: yp    
+  end subroutine derivs_symmetric
+  
   subroutine derivs_angle_phase(yc,yp)
     real(dl), dimension(:), intent(in) :: yc
     real(dl), dimension(:), intent(out) :: yp
