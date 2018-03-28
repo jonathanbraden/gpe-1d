@@ -209,6 +209,7 @@ contains
 !    fields = dreal(deviate)*spec(:,1) + iImag*dimag(deviate)*spec(:,2)
 ! To Do : add in the correlation
 
+    ! This line throws a compiler warning
     plan_inv = fftw_plan_dft_1d(n,fields,fields,FFTW_BACKWARD,FFTW_ESTIMATE)
 !    call fftw_
   end subroutine generate_correlated_1dGRF
@@ -326,7 +327,7 @@ contains
   !>@param[in] phase
   elemental function boxMueller(amp,phase)  result(r)
     real(dl), intent(in) :: amp, phase
-    real(dl) :: r
+    complex(dl) :: r  ! (check the type needed here)
     r = -sqrt(log(amp))*exp(iImag*twopi*phase)
   end function boxMueller
     
