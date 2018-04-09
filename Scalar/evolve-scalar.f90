@@ -6,13 +6,16 @@ program Gross_Pitaevskii_1d
   use gaussianRandomField
   use eom
   use integrator
+  use bubble_extraction, only : count_bubbles, mean_cos
+
   implicit none
   real(dl), dimension(:,:), pointer :: fld
   real(dl), pointer :: time
   real(dl) :: dtout_, dt_
 
   integer, parameter :: inFile = 70, cpFile = 71
-
+  integer :: i
+  
   type SimParams
      real(dl) :: dx, dt, dtout
      integer :: nLat
@@ -21,14 +24,56 @@ program Gross_Pitaevskii_1d
   
   fld(1:nLat,1:2) => yvec(1:2*nLat*nFld)
   time => yvec(2*nLat*nFld+1)
-  
-  call initialise_fields(fld)
+
+  call initialize_rand(87,18)
+
   call setup(nVar)
-  call output_fields(fld)
-  call time_evolve(0.2_dl/omega,2500,200)
-  call write_checkpoint(fld,time,cpFile)
+  do i=1,200
+     call initialise_fields(fld,nLat/8)
+     call time_evolve(0.4_dl/omega,10000,100)
+  enddo
+ 
+!  call forward_backward_evolution(0.4_dl/omega,10000,100)
   
 contains
+
+  subroutine convert_tstep_to_int(dt,dtout,tend,ns,nout)
+    real(dl), intent(in) :: dt, dtout, tend
+    integer, intent(out) :: ns, nout
+
+    ns = int(tend/dt)
+    nout = int(dtout/dt)
+  end subroutine convert_tstep_to_int
+  
+  subroutine forward_evolution(dt,ns,no)
+    real(dl), intent(in) :: dt
+    integer, intent(in) :: ns, no
+
+    call initialise_fields(fld,nLat/8)
+    call setup(nVar)
+    call output_fields(fld)
+    call time_evolve(dt,ns,no)
+    call write_checkpoint(fld,time,cpFile)
+  end subroutine forward_evolution
+  
+  subroutine forward_backward_evolution(dt,ns,no,amp)
+    real(dl), intent(in) :: dt
+    integer,intent(in) :: ns,no
+    real(dl), intent(in), optional :: amp
+    
+!    call initialize_rand(72,18)
+    call initialise_fields(fld,nLat/8)
+    call setup(nVar)
+    call output_fields(fld)
+    call time_evolve(dt,ns,no)
+    call write_checkpoint(fld,time,cpFile)
+
+    ! now time reverse by flipping sign of time derivative
+    fld(:,2) = -fld(:,2)
+    if (present(amp)) call initialise_new_fluctuations(fld,amp)  
+
+    call time_evolve(dt,ns,no)
+  end subroutine forward_backward_evolution
   
   !>@brief
   !> Initialise the integrator, setup FFTW, boot MPI, and perform other necessary setup
@@ -67,11 +112,65 @@ contains
     fld(:,1) = 0.5_dl*twopi
     fld(:,2) = 0._dl
   end subroutine initialise_mean_fields
-
+  
   !>@brief
   !> Initialise the field fluctuations
-  subroutine initialise_fluctuations(fld)
+  subroutine initialise_fluctuations(fld,kmax,amp)
     real(dl), dimension(:,:), intent(inout) :: fld
+    integer, intent(in), optional :: kmax
+    real(dl), intent(in), optional :: amp
+    
+    real(dl) :: df(1:nLat), spec(1:nLat/2+1)
+    integer :: i,j, km
+    real(dl) :: ampL
+    
+    km = size(spec); if (present(kmax)) km = kmax
+    ampL = 2._dl; if (present(amp)) ampL = amp
+    
+    spec = 0._dl
+    do i=2,nLat/2
+       spec(i) = ampL*(0.5_dl)**0.5 / (sqrt(len*rho))
+    enddo
+    call generate_1dGRF(df,spec(1:km),.false.)
+    fld(:,1) = fld(:,1) + df(:)
+
+    spec = spec * m2eff**0.5
+    call generate_1dGRF(df,spec(1:km),.false.)
+    fld(:,2) = fld(:,2) + df(:)
+
+    print*,"Mean field is ", sum(fld(:,1))/nLat - 0.5_dl*twopi
+    print*,"Mean dfld is ", sum(fld(:,2))/nLat
+  end subroutine initialise_fluctuations
+
+  subroutine initialize_vacuum_fluctuations(fld,kmax,amp)
+    real(dl), dimension(:,:), intent(inout) :: fld
+    integer, intent(in), optional :: kmax
+    real(dl), intent(in), optional :: amp
+    real(dl) :: df(1:nlat), spec(1:nLat/2+1), w2eff(1:nLat/2+1)
+    integer :: i,j, km
+    real(dl) :: ampL
+
+    km = size(spec); if (present(kmax)) km = kmax
+    ampL = 2._dl; if (present(amp)) ampL = amp
+    
+    spec = 0._dl
+    do i=2,nLat/2
+       w2eff(i) = m2eff + (twopi/len)**2*i**2
+    enddo
+    spec = 2._dl * m2eff**0.25 / sqrt(len) / w2eff**0.25 / sqrt(rho)
+    call generate_1dGRF(df,spec(1:km),.false.)
+    fld(:,1) = fld(:,1) + df(:)
+
+    spec = spec * w2eff**0.5
+    call generate_1dGRF(df,spec(1:km),.false.)
+    fld(:,2) = fld(:,2) + df(:)
+  end subroutine initialize_vacuum_fluctuations
+  
+  !>@brief
+  !> Initialise the field fluctuations
+  subroutine initialise_new_fluctuations(fld,amp)
+    real(dl), dimension(:,:), intent(inout) :: fld
+    real(dl), intent(in) :: amp
     real(dl) :: df(1:nLat), spec(1:nLat/2+1)
     integer :: i,j
     
@@ -80,21 +179,25 @@ contains
        spec(i) = (0.5_dl)**0.5 / (sqrt(len*rho))
     enddo
     call generate_1dGRF(df,spec(1:128),.false.)
-    fld(:,1) = fld(:,1) + df(:)
+    fld(:,1) = fld(:,1) + amp*df(:)
     call generate_1dGRF(df,spec(1:128),.false.)
-    fld(:,2) = fld(:,2) + df(:)
+    fld(:,2) = fld(:,2) + amp*df(:)
 
     print*,"Mean field is ", sum(fld(:,1))/nLat - 0.5_dl*twopi
     print*,"Mean dfld is ", sum(fld(:,2))/nLat
-  end subroutine initialise_fluctuations
+  end subroutine initialise_new_fluctuations
   
-  subroutine initialise_fields(fld)
+  subroutine initialise_fields(fld,kmax)
     real(dl), dimension(:,:), intent(inout) :: fld
+    integer, intent(in) :: kmax
     integer :: i; real(dl) :: dt, theta
+    integer :: km
+
     
     call initialise_mean_fields(fld)
     yvec(2*nLat+1) = 0._dl ! Add a tcur pointer here
-    call initialise_fluctuations(fld)
+    !    call initialise_fluctuations(fld)
+    call initialize_vacuum_fluctuations(fld,kmax)
   end subroutine initialise_fields
   
   subroutine time_evolve(dt,ns,no)
@@ -102,6 +205,8 @@ contains
     integer, intent(in) :: ns, no
     integer :: i,j, outsize, nums
 
+    open(unit=60,file='bubble-count.dat')
+    
     print*,"dx is ", dx, "dt is ",dt, "dx/dt is ",dx/dt
     if (dt > dx) print*,"Warning, violating Courant condition"
     
@@ -113,7 +218,9 @@ contains
           call gl10(yvec,dt)
        enddo
        call output_fields(fld)
+       write(60,*) count_bubbles(fld(:,1)), mean_cos(fld(:,1))
     enddo
+    write(60,*)
   end subroutine time_evolve
 
   subroutine output_fields(fld)
@@ -124,6 +231,8 @@ contains
 
     real(dl) :: lambda
     lambda = del*(2._dl/nu)**0.5
+
+    if (.true.) return
     
     inquire(file='fields.dat',opened=o)
     if (.not.o) then
