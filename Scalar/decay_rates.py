@@ -25,7 +25,7 @@ def decay_thresh_interp(fName,nt):
     ti = np.argmax(d[td,:,-1] > cut,axis=-1)[0]
 
     t = ti + dt*(cut - d[td,ti,-1]) / (d[td,ti,-1] - d[td,ti-1,-1]) # check ti isn't zero
-    return t, d.shape[0]
+    return t[0], d.shape[0]
 
 def decay_thresh_notrim(fName,nt):
     d = np.genfromtxt(fName).reshape((-1,nt,5))
