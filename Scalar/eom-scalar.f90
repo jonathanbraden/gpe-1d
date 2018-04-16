@@ -36,7 +36,8 @@ module eom
 
   real(dl), parameter :: lambda = del*(2._dl/nu)**0.5
   real(dl), parameter :: m2eff = 4._dl*nu*(-1._dl+lambda**2)
-  
+  real(dl), parameter :: phi0 = 5._dl
+
 #ifdef FOURIER
   type(transformPair1D) :: tPair
 #endif
