@@ -34,7 +34,7 @@ program Gross_Pitaevskii_1d
   call setup(nVar)
   do i=1,200
      call initialise_fields(fld,nLat/8)
-     call time_evolve(dx/alph,4*nlat*n_cross),128) ! Adjust this as needed
+     call time_evolve(dx/alph,4*nlat*n_cross,128) ! Adjust this as needed
 !     call time_evolve(0.4_dl/omega,10000,100)
   enddo
  
@@ -62,7 +62,21 @@ contains
     !    call initialise_fluctuations(fld)
     call initialize_vacuum_fluctuations(fld,kmax)
   end subroutine initialise_fields
-  
+
+  function light_cross_time(len) result(tmax)
+    real(dl), intent(in) :: len
+    real(dl) :: tmax
+    tmax = 0.5_dl*len
+  end function light_cross_time
+
+  function convert_t_to_nstep(dt,dtout,tend) result(ns)
+    real(dl), intent(in) :: dt,dtout, tend
+    integer, dimension(1:2) :: ns
+
+    ns(1) = int(tend/dt)
+    ns(2) = int(dtout/dt)
+  end function convert_t_to_nstep
+
   subroutine convert_tstep_to_int(dt,dtout,tend,ns,nout)
     real(dl), intent(in) :: dt, dtout, tend
     integer, intent(out) :: ns, nout
@@ -70,6 +84,58 @@ contains
     ns = int(tend/dt)
     nout = int(dtout/dt)
   end subroutine convert_tstep_to_int
+
+  !>@brief
+  !> Initialise a mean field around which to sample fluctuations within the specified band.
+  !> Returns the constrained part of the field, and the remaining fluctuations to sample
+  subroutine constrained_fluctuations(imin,imax,ns)
+    integer, intent(in) :: imin, imax, ns
+    integer :: i
+    real(dl), dimension(1:nlat/2+1) :: spec, spec_red
+    
+    ! Start by generating the "mean field"
+    spec = 0._dl
+    do i=1,size(spec)
+       spec = 1._dl
+    enddo
+    spec_red = 0._dl; spec_red(imin:imax) = spec(imin:imax)
+    ! Generate the field to sample around
+    
+    ! Now sample the non-constrained wavenumbers
+    !!!!!!!!! Check the indexing in here to make sure I'm not accidentally resampling
+    spec_red = 0._dl; spec_red(:imin) = spec(:imin); spec_red(imax:) = spec(imax:)
+    do i=1,ns
+       ! Sample the reduced spectrum
+       ! time evolve
+       ! compute any desired statistics
+    enddo
+  end subroutine constrained_fluctuations
+  
+  !>@brief
+  !> Evolve a collection of ns field trajectories holding the long-wavelength part of the field fixed while varying the short wavelengths
+  subroutine vary_high_k_modes(phi_l,ns)
+    real(dl), dimension(:,:), intent(in) :: phi_l
+    integer, intent(in) :: ns
+
+    real(dl), dimension(1:nlat) :: df
+    integer :: i
+!    call initialise_fields(phi_l,nlat/8)
+    do i=1,ns
+       ! call generate_1dGRF(df)
+       fld(:,1) = phi_l(:,1) + df
+       ! call generate_1dGRF(df)
+       fld(:,2) = phi_l(:,2) + df
+       !call time_evolve()
+    enddo
+  end subroutine vary_high_k_modes
+
+  !>@brief
+  !> Evolve a collection of ns field trajectories holding the short-wavelength part of the field fixed while varying the long wavelengths
+  subroutine vary_low_k_modes(phi_s,ns)
+    real(dl), dimension(:), intent(in) :: phi_s
+    integer, intent(in) :: ns
+
+  end subroutine vary_low_k_modes
   
   subroutine forward_evolution(dt,ns,no)
     real(dl), intent(in) :: dt
@@ -154,9 +220,6 @@ contains
     spec = spec * m2eff**0.5
     call generate_1dGRF(df,spec(1:km),.false.)
     fld(:,2) = fld(:,2) + df(:)
-
-    print*,"Mean field is ", sum(fld(:,1))/nLat - 0.5_dl*twopi
-    print*,"Mean dfld is ", sum(fld(:,2))/nLat
   end subroutine initialise_fluctuations
 
   !>@brief
