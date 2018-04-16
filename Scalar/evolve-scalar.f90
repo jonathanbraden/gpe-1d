@@ -34,7 +34,7 @@ program Gross_Pitaevskii_1d
   call setup(nVar)
   do i=1,200
      call initialise_fields(fld,nLat/8)
-     call time_evolve(dx/alph,4*nlat*n_cross),128) ! Adjust this as needed
+     call time_evolve(dx/alph,4*nlat*n_cross,128) ! Adjust this as needed
 !     call time_evolve(0.4_dl/omega,10000,100)
   enddo
  
@@ -74,7 +74,7 @@ contains
     integer, dimension(1:2) :: ns
 
     ns(1) = int(tend/dt)
-    nout = int(dtout/dt)
+    ns(2) = int(dtout/dt)
   end function convert_t_to_nstep
 
   subroutine convert_tstep_to_int(dt,dtout,tend,ns,nout)
@@ -103,7 +103,7 @@ contains
     
     ! Now sample the non-constrained wavenumbers
     !!!!!!!!! Check the indexing in here to make sure I'm not accidentally resampling
-    spec_red = 0._dl: spec_red(:imin) = spec(:imin); spec_red(imax:) = spec(imax:)
+    spec_red = 0._dl; spec_red(:imin) = spec(:imin); spec_red(imax:) = spec(imax:)
     do i=1,ns
        ! Sample the reduced spectrum
        ! time evolve
@@ -119,7 +119,7 @@ contains
 
     real(dl), dimension(1:nlat) :: df
     integer :: i
-    call initialise_fields(phi_l,nlat/8)
+!    call initialise_fields(phi_l,nlat/8)
     do i=1,ns
        ! call generate_1dGRF(df)
        fld(:,1) = phi_l(:,1) + df
