@@ -15,6 +15,9 @@ program Gross_Pitaevskii_1d
 
   integer, parameter :: inFile = 70, cpFile = 71
   integer :: i
+
+  real(dl) :: alph, t_cross
+  integer :: n_cross
   
   type SimParams
      real(dl) :: dx, dt, dtout
@@ -25,17 +28,40 @@ program Gross_Pitaevskii_1d
   fld(1:nLat,1:2) => yvec(1:2*nLat*nFld)
   time => yvec(2*nLat*nFld+1)
 
-  call initialize_rand(87,18)
+  alph = 4._dl; n_cross = 2
 
+  call initialize_rand(87,18)
   call setup(nVar)
   do i=1,200
      call initialise_fields(fld,nLat/8)
-     call time_evolve(0.4_dl/omega,10000,100)
+     call time_evolve(dx/alph,4*nlat*n_cross),128) ! Adjust this as needed
+!     call time_evolve(0.4_dl/omega,10000,100)
   enddo
  
 !  call forward_backward_evolution(0.4_dl/omega,10000,100)
   
 contains
+
+  !>@brief
+  !> Initialise the integrator, setup FFTW, boot MPI, and perform other necessary setup
+  !> before starting the program
+  subroutine setup(nVar)
+    integer, intent(in) :: nVar
+    call init_integrator(nVar)
+    call initialize_transform_1d(tPair,nLat)
+  end subroutine setup
+
+  subroutine initialise_fields(fld,kmax)
+    real(dl), dimension(:,:), intent(inout) :: fld
+    integer, intent(in) :: kmax
+    integer :: i; real(dl) :: dt, theta
+    integer :: km
+    
+    call initialise_mean_fields(fld)
+    yvec(2*nLat+1) = 0._dl ! Add a tcur pointer here
+    !    call initialise_fluctuations(fld)
+    call initialize_vacuum_fluctuations(fld,kmax)
+  end subroutine initialise_fields
 
   function light_cross_time(len) result(tmax)
     real(dl), intent(in) :: len
@@ -50,7 +76,7 @@ contains
     ns(1) = int(tend/dt)
     nout = int(dtout/dt)
   end function convert_t_to_nstep
-  
+
   subroutine convert_tstep_to_int(dt,dtout,tend,ns,nout)
     real(dl), intent(in) :: dt, dtout, tend
     integer, intent(out) :: ns, nout
@@ -140,15 +166,6 @@ contains
 
     call time_evolve(dt,ns,no)
   end subroutine forward_backward_evolution
-  
-  !>@brief
-  !> Initialise the integrator, setup FFTW, boot MPI, and perform other necessary setup
-  !> before starting the program
-  subroutine setup(nVar)
-    integer, intent(in) :: nVar
-    call init_integrator(nVar)
-    call initialize_transform_1d(tPair,nLat)
-  end subroutine setup
 
   subroutine initialise_from_file(fName,n)
     character(*), intent(in) :: fName
@@ -181,21 +198,21 @@ contains
   
   !>@brief
   !> Initialise the field fluctuations
-  subroutine initialise_fluctuations(fld,kmax,amp)
+  subroutine initialise_fluctuations(fld,kmax,phi0)
     real(dl), dimension(:,:), intent(inout) :: fld
     integer, intent(in), optional :: kmax
-    real(dl), intent(in), optional :: amp
+    real(dl), intent(in), optional :: phi0
     
     real(dl) :: df(1:nLat), spec(1:nLat/2+1)
     integer :: i,j, km
-    real(dl) :: ampL
+    real(dl) :: phiL
     
     km = size(spec); if (present(kmax)) km = kmax
-    ampL = 2._dl; if (present(amp)) ampL = amp
+    phiL = 0.5_dl; if (present(phi0)) phiL = phi0
     
     spec = 0._dl
     do i=2,nLat/2
-       spec(i) = ampL*(0.5_dl)**0.5 / (sqrt(len*rho))
+       spec(i) = (1./phiL)*(0.5_dl)**0.5 / (sqrt(len*rho))
     enddo
     call generate_1dGRF(df,spec(1:km),.false.)
     fld(:,1) = fld(:,1) + df(:)
@@ -205,22 +222,32 @@ contains
     fld(:,2) = fld(:,2) + df(:)
   end subroutine initialise_fluctuations
 
-  subroutine initialize_vacuum_fluctuations(fld,kmax,amp)
+  !>@brief
+  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
+  !> Spectra in this subroutine are truncated for direct comparison of 
+  !> fluctuations generated between lattices of varying size.
+  !
+  ! TO DO: Fix nonlocality with len, m2eff, nlat, etc
+  ! TO DO: Add an option to instead directly compare lattices of the same size with different spectral cuts
+  subroutine initialize_vacuum_fluctuations(fld,kmax,phi0)
     real(dl), dimension(:,:), intent(inout) :: fld
     integer, intent(in), optional :: kmax
-    real(dl), intent(in), optional :: amp
+    real(dl), intent(in), optional :: phi0
     real(dl) :: df(1:nlat), spec(1:nLat/2+1), w2eff(1:nLat/2+1)
-    integer :: i,j, km
-    real(dl) :: ampL
+    integer :: i,km, n
+    real(dl) :: phiL, norm
 
     km = size(spec); if (present(kmax)) km = kmax
-    ampL = 2._dl; if (present(amp)) ampL = amp
+    phiL = twopi; if (present(phi0)) phiL = phi0
     
-    spec = 0._dl
-    do i=2,nLat/2
+    norm = (0.5_dl)**0.5 / phiL / sqrt(2._dl) / sqrt(len) ! second factor of 1/sqrt(2) is normalising the Box-Mueller, first one is from 1/sqrt(2\omega)
+    ! Fix the nonlocality of the length
+
+    do i=1,nLat/2+1
        w2eff(i) = m2eff + (twopi/len)**2*(i-1)**2
     enddo
-    spec = 2._dl * m2eff**0.25 / sqrt(len) / w2eff**0.25 / sqrt(rho)
+    spec = 0._dl
+    spec(2:) = norm / w2eff(2:)**0.25
     call generate_1dGRF(df,spec(1:km),.false.)
     fld(:,1) = fld(:,1) + df(:)
 
@@ -246,22 +273,7 @@ contains
     call generate_1dGRF(df,spec(1:128),.false.)
     fld(:,2) = fld(:,2) + amp*df(:)
 
-    print*,"Mean field is ", sum(fld(:,1))/nLat - 0.5_dl*twopi
-    print*,"Mean dfld is ", sum(fld(:,2))/nLat
   end subroutine initialise_new_fluctuations
-  
-  subroutine initialise_fields(fld,kmax)
-    real(dl), dimension(:,:), intent(inout) :: fld
-    integer, intent(in) :: kmax
-    integer :: i; real(dl) :: dt, theta
-    integer :: km
-
-    
-    call initialise_mean_fields(fld)
-    yvec(2*nLat+1) = 0._dl ! Add a tcur pointer here
-    !    call initialise_fluctuations(fld)
-    call initialize_vacuum_fluctuations(fld,kmax)
-  end subroutine initialise_fields
   
   subroutine time_evolve(dt,ns,no)
     real(dl), intent(in) :: dt
