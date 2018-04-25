@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 def decay_thresh(fName,nt):
     a = np.genfromtxt(fName)
     d = a[:a.shape[0]-a.shape[0] % nt,:].reshape((-1,nt,5))
-#    d = np.genfromtxt(fName).reshape((-1,nt,5))
     td = np.where(np.max(d[:,:,-1],axis=-1) > -0.5)
     t = np.argmax(d[td,:,-1] > -0.8,axis=-1)[0]
     return t, d.shape[0]
