@@ -27,7 +27,7 @@ def decay_thresh_interp(fName,nt,thresh=-0.8,cut=-0.5,dt=1.):
     td = np.where(np.max(d[:,:,-1],axis=-1) > cut)
     ti = np.argmax(d[td,:,-1] > thresh,axis=-1)[0]
 
-    t = ti + dt*(cut - d[td,ti,-1]) / (d[td,ti,-1] - d[td,ti-1,-1]) # check ti isn't zero
+    t = ti + dt*(thresh - d[td,ti,-1]) / (d[td,ti,-1] - d[td,ti-1,-1]) # check ti isn't zero
     return t[0], d.shape[0]
 
 def decay_thresh_notrim(fName,nt):
@@ -118,7 +118,7 @@ def extract_decay_times(d,th=-0.8,cut=-0.5,interp=False,dt=1.,**kwargs):
     # This needs to be fixed to work when ti = 0, or fucky slope
     # Why does this thing fuck up so bad?  Because if I'm using early times, might not have an increasing slope, which will fuck everything up ...
     if interp:
-        t = ti + np.sign(ti[0])*(th - d[td,ti]) / (d[td,ti] - d[td,ti-1]) 
+        t = ti + np.sign(ti)*(th - d[td,ti]) / (d[td,ti] - d[td,ti-1]) 
         t = t[0]
     else:
         t = ti
