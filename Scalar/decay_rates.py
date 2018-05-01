@@ -43,7 +43,7 @@ def get_trajectories(files,nt,ax=-1):
         d.append( a[:a.shape[0]-a.shape[0]% nt,ax].reshape((-1,nt)) )
     return d
 
-def quick_plot_traj(d,lv,t=-0.8,tc=-0.5,dt=1.5440808887540916*2.*(2.e-3)**0.5,interp=True):
+def quick_plot_traj(d,lv,**kwargs):
     t = [ extract_decay_times(dc,th=t,cut=tc,interp=interp) for dc in d ]
 
     fig, ax = plt.subplots()
@@ -56,7 +56,7 @@ def quick_plot_traj(d,lv,t=-0.8,tc=-0.5,dt=1.5440808887540916*2.*(2.e-3)**0.5,in
 
     return fig,ax
 
-def quick_plot_traj_survive(d,lv,t=-0.8,tc=-0.5,dt=1.5440808887540916*2.*(2.e-3)**0.5,interp=True):
+def quick_plot_traj_survive(d,lv,**kwargs):
     t = [ extract_decay_times(dc,th=t,cut=tc,interp=interp) for dc in d ]
 
     fig, ax = plt.subplots()
@@ -67,35 +67,6 @@ def quick_plot_traj_survive(d,lv,t=-0.8,tc=-0.5,dt=1.5440808887540916*2.*(2.e-3)
     ax.set_xlabel(r'$\bar{t}$')
     ax.set_ylim(-0.1,1.1)
 
-    return fig,ax
-
-def quick_plot(files,lv,nt=256,t=-0.8,tc=-0.5,dt = 1.5440808887540916*2.*(2.e-3)**0.5,interp=True):
-    if interp:
-        t = [ decay_thresh_interp(f,nt,thresh=t,cut=tc) for f in files ]
-    else:
-        t = [ decay_thresh(f,nt,thresh=t,cut=tc) for f in files ]
-
-    fig, ax = plt.subplots()
-    for i,tc in enumerate(t):
-        ax.plot(dt*np.sort(tc[0]),np.linspace(0.,1.,tc[1])[:tc[0].size],label=lv[i])
-    plt.legend(loc='lower right',ncol=2)
-    _decay_labels(ax)
-    ax.set_ylim(-0.1,1.1)
-
-    return fig,ax
-
-def quick_plot_survive(files,lv,nt=512,t=-0.8,tc=-0.5,dt=1.5440808887540916/2./(2.e-3)**0.5,interp=True):
-    if interp:
-        t = [ decay_thresh_interp(f,nt,thresh=t,cut=tc) for f in files ]
-    else:
-        t = [ decay_thresh(f,nt,thresh=t,cut=tc) for f in files ]
-
-    fig, ax = plt.subplots()
-    for i,tc in enumerate(t):
-        ax.plot(dt*np.sort(tc[0]),1.-np.linspace(0.,1.,tc[1])[:tc[0].size],label=r'$%s$' % lv[i])
-    plt.legend(loc='lower right',ncol=2)
-    _survive_labels(ax)
-    ax.set_ylim(-0.1,1.1)
     return fig,ax
 
 def _decay_labels(ax):
@@ -197,7 +168,7 @@ def plot_compare_interp(d,tv,**kwargs):
     t = extract_decay_times(d,th=tv,interp=False,**kwargs)
     ax.plot(np.sort(t[0]),1.-np.linspace(0.,1.,t[1])[:t[0].size])
     t = extract_decay_times(d,th=tv,interp=True,**kwargs)
-    ax.plot(np.sort(t[0]),1.-np.linspace(0.,1.,t[1])[:t[0].size],'o')
+    ax.plot(np.sort(t[0]),1.-np.linspace(0.,1.,t[1])[:t[0].size],'--')
     return fig, ax
 
 def plot_lin_fits():
@@ -221,6 +192,22 @@ def get_tbounds_from_frac(d,fmin,fmax,**kwargs):
     imin = np.argmax(y<fmax); imax = np.argmax(y<fmin)
     tmin = x[imin]; tmax = x[imax]
     return tmin,tmax
+
+def decay_rates_vary_frac(d,fmin,fmax,**kwargs):
+    t = [ extract_decay_times(dc,**kwargs) for dc in d ]
+    gam = np.empty((len(d),fmin.size))
+    for j,(f0,f1) in enumerate(zip(fmin,fmax)):
+        tb = [ get_tbounds_from_frac(dc,f0,f1,**kwargs) for dc in d ]
+        gam[:,j] = [ decay_rate_from_survive(d[i],tb[i][0],tb[i][1],**kwargs)[0][0] for i in range(len(d)) ]
+    return -gam
+
+def decay_rates_vary_thresh(d,tv,fmin,fmax,**kwargs):
+    gam = np.empty((tv.size,len(d)))
+    for j,th in enumerate(tv):
+        t = [ extract_decay_times(dc,th=th,cut=th,**kwargs) for dc in d ] # fix cut
+        tb = [ get_tbounds_from_frac(dc,fmin,fmax,th=th,cut=th,**kwargs) for dc in d ]
+        gam[j,:] = [ decay_rate_from_survive(d[i],tb[i][0],tb[i][1],th=th,cut=th,**kwargs)[0][0] for i in range(len(d)) ]
+    return -gam
 
 def scan_decay_rates(d,tmin,tmax,**kwargs):
     p = np.array([ decay_rate_from_survive(d[i],tmin[i],tmax[i],**kwargs)[0] for i in range(len(d)) ])
