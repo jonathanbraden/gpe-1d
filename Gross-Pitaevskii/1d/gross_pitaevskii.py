@@ -26,9 +26,10 @@ def fourier_derivative_cmpx(f,dx):
 # These functions assume that the variables are being stored in a single array with the last column indexing the fields, first real, then complex, the second last the lattice site, and the first index the time step
 
 class GPEData(object):
-    def __init__(self,fName,nLat=256):
-        self.latData, self.modData = readASCII_header(fName)
-        self.latData['n'] = nLat
+    def __init__(self,fName,nLat=256,dx=1.,dt=1.):
+        self.latData, self.modData = readASCII_header(fName) # Junk line to remove later
+
+        self.latData = set_latDict(dx,dt,nLat)
         
         self.fld = readASCII_1d(fName,nLat)
         self.nFld = self.fld.shape[-1]
@@ -43,6 +44,9 @@ class GPEData(object):
         self.dphi = np.diff(self.phi,axis=-1); self.tphi = np.mean(self.phi,axis=-1)
         return
 
+    def getCosPhi(self):
+        return self.fld
+    
     def getPhase(self):
         return self.phi
 
@@ -67,20 +71,28 @@ def readASCII_header(fName):
     """
     with open(fName) as f:
         pass
-    latDict = {
-        "dx"    : dx,
-        "dt"    : dt,
-        "n"     : 256
-        }
-    modDict = {
-        "nu"    : nu,
-        "gs"    : 1.,
-        "om"    : om,
-        "lam"   : lv,
-        "rho"   : 89.442719099991592
-        }
+    latDict = set_latDict(dx,dt,256)
+    modDict = set_modDict(nu,1.,om,lv,89.442719099991592)
     return latDict, modDict
-    
+
+def set_latDict(dx,dt,n):
+    lat = {
+        "dx" : dx,
+        "dt" : dt,
+        "n"  : n
+        }
+    return lat
+
+def set_modDict(nu,gs,w,lv,rho):
+    mod = {
+        "nu"  : nu,
+        "gs"  : 1.,
+        "om"  : w,
+        "lam" : lv,
+        "rho" : 89.442719099991592
+    }
+    return mod
+
 def readASCII_1d(fName,nLat=256):
     """
     Read in simulation data stored as columns of the real and imaginary parts of the fields in alternating columns.
@@ -120,11 +132,17 @@ def computeRhoDiff(d):
 def computePhi(d):
     return
 
+def computeCosPhi(d):
+    """
+    Returns cos(phi) where phi is the relative phase between the two condensates
+    """
+    return ( np.real(d[:,:,0])*np.real(d[:,:,1])+np.imag(d[:,:,0])*np.imag(d[:,:,1]) )/(np.abs(d[:,:,0])*np.abs(d[:,:,1]))
+
 def geometricDensity(d):
     """
-    Returns the product of the density
+    Returns the product of the densities
     """
-    return
+    return np.prod(np.abs(d)**2,axis=-1)
 
 # Check the derivative normalization in this one
 def Particle_Current(d,dx):
@@ -150,7 +168,7 @@ def Energy(d,dx,nu,da,om=1.,dt=1.):
     
     en_k = 0.5*np.sum(np.abs(dd)**2,axis=-1)
     en_p = 0.5*np.sum(np.abs(d)**4,axis=-1)
-    en_it = -2.*om*da*(0.5*nu)**0.5*np.cos(om*tv[:,np.newaxis]))*np.real(d[:,:,0]*np.conj(d[:,:,1]))
+    en_it = -2.*om*da*(0.5*nu)**0.5*np.cos(om*tv[:,np.newaxis])*np.real(d[:,:,0]*np.conj(d[:,:,1]))
     en_i0 = -2.*nu*np.real(d[:,:,0]*np.conj(d[:,:,1]))
     #en = 0.5*np.sum(np.abs(dd)**2,axis=-1) + 0.5*np.sum(np.abs(d)**4,axis=-1) - 2.*nu*np.real(d[:,:,0]*np.conj(d[:,:,1]))
     en = en_k + en_p + en_it + en_i0

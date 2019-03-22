@@ -4,13 +4,8 @@ import matplotlib.pyplot as plt
 from myplotutils import insert_rasterized_contour_plot
 from matplotlib.ticker import MaxNLocator
 
-# Notation.  To move to separate file
-xLab = r'$\bar{x}$'
-tLab = r'$\bar{t}$'
-
-# Formatting of colours, etc.
-cosCMap = 'coolwarm'
-rhoCMap = 'PuOr'
+from notation import cosCMap, rhoCMap, xLab, tLab
+phaseRel = r'\varphi'
 
 lVals = [ '0','0.9','1','1.2','1.4','1.5' ]
 lamFiles = [ 'paper-data/vary-lambda/fields-n512-w250-l%s.dat' % l for l in lVals ]
@@ -52,13 +47,17 @@ def multipanel_vary_lambda(dx,dt,n=512):
     """
     lVals = [ '0','0.9','1','1.2','1.4','1.5' ]
     #files = [ 'paper-data/vary-lambda/fields-n512-w250-l%s.dat' % l for l in lVals ]
-    fig,ax = plt.subplots(nrows=3,ncols=2,figsize=(3.375*2.,2.08*3.),sharex=True,sharey=True,gridspec_kw = dict(wspace=0.02,hspace=0.02))
+    #    fig,ax = plt.subplots(nrows=3,ncols=2,figsize=(3.375*2.,2.08*3.),sharex=True,sharey=True,gridspec_kw = dict(wspace=0.04,hspace=0.05,left=0.1,right=0.9,top=0.95,bottom=0.1))
 
+    fig,ax = plt.subplots(nrows=3,ncols=2,figsize=(5.93,4.8616567445964964),sharex=True,sharey=True,gridspec_kw = dict(wspace=0.03,hspace=0.03))
+    fig.subplots_adjust(left=0.11242270938729623,right=0.9689432265317595,bottom=0.091418310216660928,top=0.96857495586302278)
+    
     for a,l in zip(ax.flatten(),lVals):
         f = 'paper-data/vary-lambda/fields-n512-w250-l%s.dat' % l
         d = readFile(f,n)
         tVals = dt*np.arange(d.shape[0]); xVals = dx*np.arange(d.shape[1]) 
-        cnt = a.contourf(xVals,tVals,(d[:,:,0]*d[:,:,2]+d[:,:,1]*d[:,:,3])/np.sqrt((d[:,:,1]**2+d[:,:,0]**2)*(d[:,:,2]**2+d[:,:,3]**2)),np.linspace(-1.,1.,51),zorder=-20,cmap=cosCMap)
+#        cnt = a.contourf(xVals,tVals,(d[:,:,0]*d[:,:,2]+d[:,:,1]*d[:,:,3])/np.sqrt((d[:,:,1]**2+d[:,:,0]**2)*(d[:,:,2]**2+d[:,:,3]**2)),np.linspace(-1.,1.,51),zorder=-20,cmap=cosCMap)
+        cnt = a.contourf(xVals,tVals,getPhaseDiff(d),np.linspace(-1.,1.,51),zorder=-20,cmap=cosCMap)
         a.set_rasterization_zorder(-10)
         a.text(0.95,0.95,r'$\lambda = %s$' % l,horizontalalignment='right',verticalalignment='top',transform=a.transAxes,bbox=dict(facecolor='white'))
 
@@ -70,11 +69,14 @@ def multipanel_vary_lambda(dx,dt,n=512):
 
     # Fix tick marks
     for a in ax.flatten():
-        a.get_xaxis().set_major_locator(MaxNLocator(5))
-        a.get_yaxis().set_major_locator(MaxNLocator(5))
+        a.get_xaxis().set_major_locator(MaxNLocator(6))
+        a.get_yaxis().set_major_locator(MaxNLocator(4))
 
-    # Now add the colorbar
-    cb = fig.colorbar(cnt,label=r'$\cos\phi$',ticks=[-1,0,1],pad=0.05,frac=0.1)
+    # remove exterior ticks on interior axes
+        
+    # Now add the colorbar and add space to fit in on the figure
+    fig.subplots_adjust(right=0.9689432265317595)
+    cb = fig.colorbar(cnt,label=r'$\cos%s$' % phaseRel,ticks=[-1,0,1],pad=0.01,fraction=0.03,aspect=60,ax=ax)
     cb.solids.set_rasterized(True)
     return fig,ax
 
@@ -95,7 +97,8 @@ def multipanel_lambda_plot(dx=1.,dt=1.,n=512):
         f = 'paper-data/vary-lambda/fields-n512-w250-l%s.dat' % l
         d = readFile(f,n)
         tVals = dt*np.arange(d.shape[0]); xVals = dx*np.arange(d.shape[1]) 
-        cnt = a.contourf(xVals,tVals,(d[:,:,0]*d[:,:,2]+d[:,:,1]*d[:,:,3])/np.sqrt((d[:,:,1]**2+d[:,:,0]**2)*(d[:,:,2]**2+d[:,:,3]**2)),np.linspace(-1.,1.,51),zorder=-20,cmap=cosCMap)
+#        cnt = a.contourf(xVals,tVals,(d[:,:,0]*d[:,:,2]+d[:,:,1]*d[:,:,3])/np.sqrt((d[:,:,1]**2+d[:,:,0]**2)*(d[:,:,2]**2+d[:,:,3]**2)),np.linspace(-1.,1.,51),zorder=-20,cmap=cosCMap)
+        cnt = a.contourf(xVals,tVals,getPhaseDiff(d),np.linspace(-1.,1.,51),zorder=-20,cmap=cosCMap)
         a.set_rasterization_zorder(-10)
         a.text(0.95,0.95,r'$\lambda = %s$' % l,horizontalalignment='right',verticalalignment='top',transform=a.transAxes,bbox=dict(facecolor='white'))
 
@@ -120,13 +123,14 @@ def readFile(fName,n):
 def plotCosPhase(d,dx,dt):
     f,a = plt.subplots()
     tVals = dt*np.arange(d.shape[0]); xVals = dx*np.arange(d.shape[1])
-    cnt = a.contourf(xVals, tVals, (d[:,:,0]*d[:,:,2]+d[:,:,1]*d[:,:,3])/np.sqrt((d[:,:,1]**2+d[:,:,0]**2)*(d[:,:,2]**2+d[:,:,3]**2)),np.linspace(-1.,1.,51),zorder=-20, cmap=cosCMap)
+#    cnt = a.contourf(xVals, tVals, (d[:,:,0]*d[:,:,2]+d[:,:,1]*d[:,:,3])/np.sqrt((d[:,:,1]**2+d[:,:,0]**2)*(d[:,:,2]**2+d[:,:,3]**2)),np.linspace(-1.,1.,51),zorder=-20, cmap=cosCMap)
+    cnt = a.contourf(xVals, tVals,getPhaseDiff(d),np.linspace(-1.,1.,51),zorder=-20, cmap=cosCMap)
     #for c in cnt.collections:
     #    c.set_edgecolor("face")
     a.set_rasterization_zorder(-10)
 
-    cb = f.colorbar(cnt,label=r'$\cos\phi$',fraction=0.05,pad=0.01,ticks=[-1,0,1])
-    cb.set_label(r'$\cos\phi$',labelpad=-1)
+    cb = f.colorbar(cnt,label=r'$\cos%s$' % phaseRel,fraction=0.05,pad=0.01,ticks=[-1,0,1])
+    cb.set_label(r'$\cos%s$' % phaseRel,labelpad=-1)
     cb.solids.set_rasterized(True)
 
     _t_x_labels(a)
@@ -157,7 +161,7 @@ def plotTotPhase(d):
         c.set_edgecolor("face")
     a.set_rasterization_zorder(-10)
     
-    cb = plt.colorbar(cnt,label=r'$\theta - \bar{\theta}$',fraction=0.05,pad=0.01,ticks=[0.,0.5*np.pi,np.pi])
+    cb = plt.colorbar(cnt,label=r'$\theta - \langle\theta\rangle_{\rm V}$',fraction=0.05,pad=0.01,ticks=[0.,0.5*np.pi,np.pi])
     cb.solids.set_rasterized(True)
     
     _t_x_labels(a)
@@ -170,8 +174,8 @@ def plotRhoTot(d,dx,dt):
 
     im = a.imshow(np.sum(d**2,axis=-1)-meanRho[:,np.newaxis],cmap=rhoCMap,extent=[xVals[0],xVals[-1],tVals[0],tVals[-1]],aspect='auto',origin='lower',vmin=-1,vmax=1)
 
-    cb = f.colorbar(im,label=r'$\rho$',fraction=0.05,pad=0.01,ticks=[-2,-1,0,1,2])
-    cb.set_label(r'$\rho-\bar{\rho}$',labelpad=-2)
+    cb = f.colorbar(im,label=r'$\varrho-\langle\varrho\rangle_{\rm V}$',fraction=0.05,pad=0.01,ticks=[-2,-1,0,1,2])
+    cb.set_label(r'$\varrho-\langle\varrho\rangle_{\rm V}$',labelpad=-2)
     cb.solids.set_rasterized(True) 
 
     _t_x_labels(a)
@@ -182,7 +186,7 @@ def plotRhoDiff(d,dx,dt):
     tVals = dt*np.arange(d.shape[0]); xVals = dx*np.arange(d.shape[1])
     im = a.imshow(d[:,:,2]**2+d[:,:,3]**2-d[:,:,0]**2-d[:,:,1]**2,cmap=rhoCMap,extent=[xVals[0],xVals[-1],tVals[0],tVals[-1]],aspect='auto',origin='lower',vmin=-1,vmax=1)
 
-    cb = f.colorbar(im,label=r'$\epsilon$',fraction=0.05,pad=0.01,ticks=[-2,-1,0,1,2])
+    cb = f.colorbar(im,label=r'$\varepsilon$',fraction=0.05,pad=0.01,ticks=[-2,-1,0,1,2])
     cb.set_label(r'$\rho_2-\rho_1$',labelpad=-2)
     cb.solids.set_rasterized(True)
 
@@ -255,7 +259,7 @@ def relative_stats_plot():
     f,a = plt.subplots()
     a.plot(tv0,np.mean(f0,axis=-1),label=r'No Floquet')
     a.plot(tv1,np.mean(f1,axis=-1),label=r'Floquet')
-    a.set_xlabel(tLab); a.set_ylabel(r'$\langle\cos\phi\rangle_{\rm V}$')
+    a.set_xlabel(tLab); a.set_ylabel(r'$\langle\cos\phaseRel\rangle_{\rm V}$')
 
     a.set_xlim((tv0[0],tv0[-1])); a.set_ylim((-1.1,1.1))
     a.legend(loc='lower right')
@@ -390,13 +394,13 @@ if __name__=="__main__":
 #    dtL = 1.9845101615190048
 #    dxL = 1.0918300671385692
 
-    n = 290
-    data = readFile('fields.dat',1024)
+#    n = 290
+#    data = readFile('fields.dat',1024)
 #    data = readFile('paper-data-new/convergence/floquet-dt/fields-floquet-n290-64wosc.dat',n)
-    f,a = plotCosPhase(data,1.9276448081894739,1.4049629462081452)
-    rho = getRhoTot(data)
-    drho = getRhoDiff(data)
-    phi = getPhaseDiff(data)
+#    f,a = plotCosPhase(data,1.9276448081894739,1.4049629462081452)
+#    rho = getRhoTot(data)
+#    drho = getRhoDiff(data)
+#    phi = getPhaseDiff(data)
     
 #    data = readFile('fields-n512-w256.dat',512)
 #    f,a = plotCosPhase(data,1.091830067,0.175620368276)
