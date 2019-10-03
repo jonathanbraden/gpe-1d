@@ -12,17 +12,20 @@ contains
   ! Known Bugs: Have to deal with periodic boundary, or else a bubble hitting boundary is counted twice
   function count_bubbles(fld) result(nBub)
     real(dl), dimension(:), intent(in) :: fld
+    integer, dimension(1:nt) :: nBub
+    integer :: bSize  ! make this in an input parameter
+
     real(dl), dimension(1:size(fld)) :: cphi
     integer :: n, bSize
     integer, parameter :: nt = 4
-    integer, dimension(1:nt) :: nv, nbound, nBub
+    integer, dimension(1:nt) :: nv, nbound
     real(dl), dimension(1:nt) :: thresh
     logical, dimension(1:nt) :: boundary
     integer :: i,j
     
     n = size(fld); cphi = cos(fld)
     thresh = (/ 0., 0.25, 0.5, 0.75 /)
-    nv = 0; nBub = 0; bSize = 5
+    nv = 0; nBub = 0; bSize = 15
     boundary = .false.; nbound = 0
     
     do j=1,nt

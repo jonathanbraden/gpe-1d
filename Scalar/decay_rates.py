@@ -361,7 +361,8 @@ if __name__=="__main__":
     fmin = np.array([0.05,0.05,0.05,0.05,0.05,0.05,0.5,0.5,0.96])
     fmax = np.array([0.2,0.2,0.2,0.2,0.2,0.2,0.7,0.8,0.98])
 ### L = 50, k_cut=2
-    dFile = 'runs/vary_phi0/l1.2/len50/kcut2_old/cos-traj-vary-phi0-len50-kc2-n4096.npz'
+#    dFile = 'runs/vary_phi0/l1.2/len50/kcut2_old/cos-traj-vary-phi0-len50-kc2-n4096.npz'
+    fFile = 'runs/vary_phi0/l1.2/len50/kcut2/cos-traj-vary-phi0-len50-kc2-n4096.npz'
     d = np.load(dFile); a = [ d[s] for s in fD ]
     gam_k2_l50 = -np.array( [ decay_rate_from_frac(a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a))])
 ### Add the other spectral cuts and fix the above one
