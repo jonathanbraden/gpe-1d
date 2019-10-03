@@ -73,11 +73,14 @@ ifeq ($(BENCH_FINE),T)
 	MACROS+= -DBENCHMARK_FINE_GRAIN=1
 endif
 
-#OBJS = constants.o my_clock.o fftw_mod_wtype.o random_field.o eom.o integrator.o
 OBJS = constants.o fftw_mod_wtype.o random_field.o eom-new.o integrator.o
+OBJS_OO = constants.o fftw_mod_wtype.o random_field.o gpe-model.o eom-w-model.o integrator.o
 
-gp: %: $(OBJS) evolve-gp.o
-	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -o gp-1d evolve-gp.o $(OBJS) $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)
+#gp: %: $(OBJS) evolve-gp.o
+#	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -o gp-1d evolve-gp.o $(OBJS) $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)
+
+gp-oo: %: $(OBJS_OO) evolve-gp-w-model.o
+	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -o gp-1d evolve-gp-w-model.o $(OBJS_OO) $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)
 
 %.o: %.f90
 	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -c $< -o $@ $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)
