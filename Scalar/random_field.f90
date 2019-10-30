@@ -211,7 +211,6 @@ contains
 
     ! This line throws a compiler warning
     plan_inv = fftw_plan_dft_1d(n,fields,fields,FFTW_BACKWARD,FFTW_ESTIMATE)
-!    call fftw_
   end subroutine generate_correlated_1dGRF
 
 #ifdef TESTING
@@ -327,8 +326,8 @@ contains
   !>@param[in] phase
   elemental function boxMueller(amp,phase)  result(r)
     real(dl), intent(in) :: amp, phase
-    complex(dl) :: r  ! (check the type needed here)
-    r = -sqrt(log(amp))*exp(iImag*twopi*phase)
+    complex(dl) :: r
+    r = sqrt(-log(amp))*exp(iImag*twopi*phase)
   end function boxMueller
     
 end module gaussianRandomField

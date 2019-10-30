@@ -1,5 +1,8 @@
 #include "macros.h"
 
+!TO DO : Move fluctuation subroutines into a separate module
+! Update thermal fluctuations, etc. to mimic the vacuum fluctuations (where I've fixed all of the horrible nonlocality)
+
 program Gross_Pitaevskii_1d
   use, intrinsic :: iso_c_binding
   use constants, only : dl, twopi
@@ -66,7 +69,7 @@ contains
     phiL = 0.5_dl*twopi; if (present(phi)) phiL = phi
     call initialise_mean_fields(fld)
     yvec(2*nLat+1) = 0._dl ! Add a tcur pointer here
-    call initialize_vacuum_fluctuations(fld,len,kmax,phiL,kc)
+    call initialize_vacuum_fluctuations(fld,len,m2eff,kmax,phiL,kc)
   end subroutine initialise_fields
 
   !>@brief
@@ -75,9 +78,9 @@ contains
   !> fluctuations generated between lattices of varying size.
   !
   ! TO DO: Fix nonlocality of m2eff
-  subroutine initialize_vacuum_fluctuations(fld,len,kspec,phi0,klat)
+  subroutine initialize_vacuum_fluctuations(fld,len,m2,kspec,phi0,klat)
     real(dl), dimension(:,:), intent(inout) :: fld
-    real(dl), intent(in) :: len
+    real(dl), intent(in) :: len, m2
     integer, intent(in), optional :: kspec, klat
     real(dl), intent(in), optional :: phi0
     
@@ -86,10 +89,8 @@ contains
     integer :: i,km,kc
     real(dl) :: phiL, norm
 
-    integer :: n, nn
-    real(dl) :: dk
-    dk = twopi / len
-    n = size(fld(:,1)); nn = n/2+1
+    integer :: n, nn; real(dl) :: dk
+    dk = twopi / len; n = size(fld(:,1)); nn = n/2+1
     
     km = size(spec); if (present(kspec)) km = kspec
     kc = size(spec); if (present(klat))  kc = klat
@@ -100,7 +101,7 @@ contains
     norm = (0.5_dl)**0.5 / phiL / sqrt(2._dl) / sqrt(len) ! second factor of 1/sqrt(2) is normalising the Box-Mueller, first one is from 1/sqrt(2\omega)
 
     do i=1,nn
-       w2eff(i) = m2eff + dk**2*(i-1)**2  ! Fix nonlocality of m2eff
+       w2eff(i) = m2 + dk**2*(i-1)**2
     enddo
     spec = 0._dl
     spec(2:km) = norm / w2eff(2:km)**0.25
