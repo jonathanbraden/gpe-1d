@@ -5,11 +5,10 @@ PROF = F
 WARN = T
 BENCH = F
 BENCH_FINE = F
-BLAS = T
+BLAS = F
 
 # Default FFTW Lib location
-FFTW_DIR = /usr/local/fftw/fftw-3.3.4-gcc-5.1.0/
-#FFTW_DIR = $(HOME)/local/fftw-3.3.4/gcc-4.4.7/
+FFTW_DIR = /share/apps/fftw-3.3.5/
 FFTW_INC = -I$(FFTW_DIR)include/
 FFTW_LIB = -L$(FFTW_DIR)lib/
 
@@ -74,7 +73,7 @@ ifeq ($(BENCH_FINE),T)
 endif
 
 #OBJS = constants.o my_clock.o fftw_mod_wtype.o random_field.o eom.o integrator.o
-OBJS = constants.o fftw_mod_wtype.o random_field.o eom-scalar.o integrator.o
+OBJS = constants.o fftw_mod_wtype.o random_field.o eom-scalar.o integrator.o bubble-extraction.o
 
 scalar: %: $(OBJS) evolve-scalar.o
 	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -o scalar-1d evolve-scalar.o $(OBJS) $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)
