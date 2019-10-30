@@ -1,17 +1,13 @@
 #include "macros.h"
 
-!TO DO : Move fluctuation subroutines into a separate module
-! Update thermal fluctuations, etc. to mimic the vacuum fluctuations (where I've fixed all of the horrible nonlocality)
-
 program Gross_Pitaevskii_1d
   use, intrinsic :: iso_c_binding
   use constants, only : dl, twopi
   use gaussianRandomField
   use eom
   use integrator
-  use bubble_extraction!, only : count_bubbles, mean_cos, make_fourier_window, smooth_filter
-!  use fluctuations
-  
+  use bubble_extraction, only : count_bubbles, mean_cos
+
   implicit none
   real(dl), dimension(:,:), pointer :: fld
   real(dl), pointer :: time
@@ -32,20 +28,16 @@ program Gross_Pitaevskii_1d
   fld(1:nLat,1:2) => yvec(1:2*nLat*nFld)
   time => yvec(2*nLat*nFld+1)
 
-  alph = 8._dl; n_cross = 2
-  
-  call initialize_rand(93286123,12)
+  alph = 4._dl; n_cross = 2
+
+  call initialize_rand(87,18)
   call setup(nVar)
-
-!  do i=1,200
-!     call initialise_fields(fld,nLat/4)
-!     call time_evolve(dx/alph,4*nlat*n_cross,128) ! Adjust this as needed!   
+  do i=1,200
+     call initialise_fields(fld,nLat/8+1)
+     call time_evolve(dx/alph,4*nlat*n_cross,128) ! Adjust this as needed
 !     call time_evolve(0.4_dl/omega,10000,100)
-!  enddo
-
-  call initialise_fields(fld,nLat/2+1,0.25*twopi,(nLat/2+1)/2)
-  call time_evolve(dx/alph,4*nlat*n_cross,128)
-
+  enddo
+ 
 !  call forward_backward_evolution(0.4_dl/omega,10000,100)
   
 contains
@@ -59,175 +51,18 @@ contains
     call initialize_transform_1d(tPair,nLat)
   end subroutine setup
 
-  subroutine initialise_fields(fld,kmax,phi,klat)
+  subroutine initialise_fields(fld,kmax)
     real(dl), dimension(:,:), intent(inout) :: fld
     integer, intent(in) :: kmax
-    real(dl), intent(in), optional :: phi
-    integer, intent(in), optional :: klat
-    integer :: kc
-    real(dl) :: phiL
-
-    kc = nLat/2+1; if (present(klat)) kc = klat
-    phiL = 0.5_dl*twopi; if (present(phi)) phiL = phi
+    integer :: i; real(dl) :: dt, theta
+    integer :: km
+    
     call initialise_mean_fields(fld)
     yvec(2*nLat+1) = 0._dl ! Add a tcur pointer here
-    call initialize_vacuum_fluctuations(fld,len,m2eff,kmax,phiL,kc)
+    !    call initialise_fluctuations(fld)
+    call initialize_vacuum_fluctuations(fld,kmax)
   end subroutine initialise_fields
 
-  !>@brief
-  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
-  !> Spectra in this subroutine are truncated for direct comparison of 
-  !> fluctuations generated between lattices of varying size.
-  !
-  ! TO DO: Fix nonlocality of m2eff
-  subroutine initialize_vacuum_fluctuations(fld,len,m2,kspec,phi0,klat)
-    real(dl), dimension(:,:), intent(inout) :: fld
-    real(dl), intent(in) :: len, m2
-    integer, intent(in), optional :: kspec, klat
-    real(dl), intent(in), optional :: phi0
-    
-    real(dl), dimension(1:size(fld(:,1)/2+1)) :: spec, w2eff  ! remove w2eff here, it's unneeded
-    real(dl), dimension(1:size(fld(:,1))) :: df
-    integer :: i,km,kc
-    real(dl) :: phiL, norm
-
-    integer :: n, nn; real(dl) :: dk
-    dk = twopi / len; n = size(fld(:,1)); nn = n/2+1
-    
-    km = size(spec); if (present(kspec)) km = kspec
-    kc = size(spec); if (present(klat))  kc = klat
-    
-    phiL = twopi; if (present(phi0)) phiL = phi0
-
-    ! The second 1/sqrt(2) is a bug since this factor isn't in my GRF sampler
-    norm = (0.5_dl)**0.5 / phiL / sqrt(2._dl) / sqrt(len) ! second factor of 1/sqrt(2) is normalising the Box-Mueller, first one is from 1/sqrt(2\omega)
-
-    do i=1,nn
-       w2eff(i) = m2 + dk**2*(i-1)**2
-    enddo
-    spec = 0._dl
-    spec(2:km) = norm / w2eff(2:km)**0.25
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,1) = fld(:,1) + df(:)
-
-    spec = spec * w2eff**0.5
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,2) = fld(:,2) + df(:)
-  end subroutine initialize_vacuum_fluctuations
-
-  !>@brief
-  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
-  !> Spectra in this subroutine are truncated for direct comparison of 
-  !> fluctuations generated between lattices of varying size.
-  !
-  ! TO DO: Fix nonlocality with len, m2eff, nlat, etc
-  ! TO DO: Add an option to instead directly compare lattices of the same size with different spectral cuts
-  subroutine initialize_thermal_fluctuations(fld,temp,kspec,phi0,klat)
-    real(dl), dimension(:,:), intent(inout) :: fld
-    real(dl), intent(in) :: temp
-    integer, intent(in), optional :: kspec, klat
-    real(dl), intent(in), optional :: phi0
-    real(dl) :: df(1:nlat), spec(1:nLat/2+1), w2eff(1:nLat/2+1)
-    integer :: i,km,kc, n
-    real(dl) :: phiL, norm
-
-    km = size(spec); if (present(kspec)) km = kspec
-    kc = size(spec); if (present(klat))  kc = klat
-    
-    phiL = twopi; if (present(phi0)) phiL = phi0
-    
-    ! The 1/sqrt(2) is a bug since this factor isn't in my GRF sampler
-    norm = (0.5_dl)**0.5 / phiL / sqrt(len) 
-
-    do i=1,nLat/2+1
-       w2eff(i) = m2eff + (twopi/len)**2*(i-1)**2
-    enddo
-    spec = 0._dl
-    spec(2:km) = norm / w2eff(2:km)**0.25 * sqrt( 1._dl/(exp(w2eff(2:km)**0.5/temp)-1._dl) + 0.5_dl)
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,1) = fld(:,1) + df(:)
-
-    spec = spec * w2eff**0.5
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,2) = fld(:,2) + df(:)
-  end subroutine initialize_thermal_fluctuations
-
-  ! Add only thermal fluctuations
-  !>@brief
-  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
-  !> Spectra in this subroutine are truncated for direct comparison of 
-  !> fluctuations generated between lattices of varying size.
-  !
-  ! TO DO: Fix nonlocality with len, m2eff, nlat, etc
-  ! TO DO: Add an option to instead directly compare lattices of the same size with different spectral cuts
-  subroutine initialize_only_thermal_fluctuations(fld,temp,kspec,phi0,klat)
-    real(dl), dimension(:,:), intent(inout) :: fld
-    real(dl), intent(in) :: temp
-    integer, intent(in), optional :: kspec, klat
-    real(dl), intent(in), optional :: phi0
-    real(dl) :: df(1:nlat), spec(1:nLat/2+1), w2eff(1:nLat/2+1)
-    integer :: i,km,kc, n
-    real(dl) :: phiL, norm
-
-    km = size(spec); if (present(kspec)) km = kspec
-    kc = size(spec); if (present(klat))  kc = klat
-    
-    phiL = twopi; if (present(phi0)) phiL = phi0
-    
-    ! The 1/sqrt(2) is a bug since this factor isn't in my GRF sampler
-    norm = (0.5_dl)**0.5 / phiL / sqrt(len) 
-
-    do i=1,nLat/2+1
-       w2eff(i) = m2eff + (twopi/len)**2*(i-1)**2
-    enddo
-    spec = 0._dl
-    spec(2:km) = norm / w2eff(2:km)**0.25 * sqrt( 1._dl/(exp(w2eff(2:km)**0.5/temp)-1._dl) )
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,1) = fld(:,1) + df(:)
-
-    spec = spec * w2eff**0.5
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,2) = fld(:,2) + df(:)
-  end subroutine initialize_only_thermal_fluctuations
-  
-  ! Add subroutine for high-temperature limit of thermal fluctuations
-  !>@brief
-  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
-  !> Spectra in this subroutine are truncated for direct comparison of 
-  !> fluctuations generated between lattices of varying size.
-  !
-  ! TO DO: Fix nonlocality with len, m2eff, nlat, etc
-  ! TO DO: Add an option to instead directly compare lattices of the same size with different spectral cuts
-  subroutine initialize_high_T_fluctuations(fld,temp,kspec,phi0,klat)
-    real(dl), dimension(:,:), intent(inout) :: fld
-    real(dl), intent(in) :: temp
-    integer, intent(in), optional :: kspec, klat
-    real(dl), intent(in), optional :: phi0
-    real(dl) :: df(1:nlat), spec(1:nLat/2+1), w2eff(1:nLat/2+1)
-    integer :: i,km,kc, n
-    real(dl) :: phiL, norm
-
-    km = size(spec); if (present(kspec)) km = kspec
-    kc = size(spec); if (present(klat))  kc = klat
-    
-    phiL = twopi; if (present(phi0)) phiL = phi0
-    
-    ! The 1/sqrt(2) is a bug since this factor isn't in my GRF sampler
-    norm = (0.5_dl)**0.5 / phiL / sqrt(len) 
-
-    do i=1,nLat/2+1
-       w2eff(i) = m2eff + (twopi/len)**2*(i-1)**2
-    enddo
-    spec = 0._dl
-    spec(2:km) = norm / w2eff(2:km)**0.5 * sqrt(temp)
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,1) = fld(:,1) + df(:)
-
-    spec = spec * w2eff**0.5
-    call generate_1dGRF(df,spec(:kc),.false.)
-    fld(:,2) = fld(:,2) + df(:)
-  end subroutine initialize_high_T_fluctuations
-  
   function light_cross_time(len) result(tmax)
     real(dl), intent(in) :: len
     real(dl) :: tmax
@@ -360,20 +195,6 @@ contains
     fld(:,1) = 0.5_dl*twopi
     fld(:,2) = 0._dl
   end subroutine initialise_mean_fields
-
-  subroutine initialise_fluc(fld,spec,kmax)
-    real(dl), dimension(:,:), intent(inout) :: fld
-    real(dl), dimension(:,:), intent(in) :: spec
-    integer, intent(in), optional :: kmax
-
-    real(dl) :: df(1:nLat); integer :: km
-
-    km = size(spec(:,1)); if (present(kmax)) km = kmax
-    call generate_1dGRF(df,spec(1:km,1),.false.)
-    fld(:,1) = fld(:,1) + df
-    call generate_1dGRF(df,spec(1:km,2),.false.)
-    fld(:,2) = fld(:,2) + df
-  end subroutine initialise_fluc
   
   !>@brief
   !> Initialise the field fluctuations
@@ -401,6 +222,40 @@ contains
     fld(:,2) = fld(:,2) + df(:)
   end subroutine initialise_fluctuations
 
+  !>@brief
+  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
+  !> Spectra in this subroutine are truncated for direct comparison of 
+  !> fluctuations generated between lattices of varying size.
+  !
+  ! TO DO: Fix nonlocality with len, m2eff, nlat, etc
+  ! TO DO: Add an option to instead directly compare lattices of the same size with different spectral cuts
+  subroutine initialize_vacuum_fluctuations(fld,kmax,phi0)
+    real(dl), dimension(:,:), intent(inout) :: fld
+    integer, intent(in), optional :: kmax
+    real(dl), intent(in), optional :: phi0
+    real(dl) :: df(1:nlat), spec(1:nLat/2+1), w2eff(1:nLat/2+1)
+    integer :: i,km, n
+    real(dl) :: phiL, norm
+
+    km = size(spec); if (present(kmax)) km = kmax
+    phiL = twopi; if (present(phi0)) phiL = phi0
+    
+    norm = (0.5_dl)**0.5 / phiL / sqrt(2._dl) / sqrt(len) ! second factor of 1/sqrt(2) is normalising the Box-Mueller, first one is from 1/sqrt(2\omega)
+    ! Fix the nonlocality of the length
+
+    do i=1,nLat/2+1
+       w2eff(i) = m2eff + (twopi/len)**2*(i-1)**2
+    enddo
+    spec = 0._dl
+    spec(2:) = norm / w2eff(2:)**0.25
+    call generate_1dGRF(df,spec(1:km),.false.)
+    fld(:,1) = fld(:,1) + df(:)
+
+    spec = spec * w2eff**0.5
+    call generate_1dGRF(df,spec(1:km),.false.)
+    fld(:,2) = fld(:,2) + df(:)
+  end subroutine initialize_vacuum_fluctuations
+  
   !>@brief
   !> Initialise the field fluctuations
   subroutine initialise_new_fluctuations(fld,amp)
@@ -443,20 +298,16 @@ contains
     write(60,*)
   end subroutine time_evolve
 
-#define SMOOTH 1
   subroutine output_fields(fld)
     real(dl), dimension(:,:), intent(in) :: fld
     logical :: o; integer :: i
     integer, parameter :: oFile = 99
     real(dl), dimension(1:nLat) :: gsq, gsq_fd
-    
+
     real(dl) :: lambda
-#ifdef SMOOTH
-    real(dl), dimension(1:nLat) :: w_box, f_sm
-    complex(dl), dimension(1:nLat/2+1) :: wk
-#endif
-    
     lambda = del*(2._dl/nu)**0.5
+
+    if (.true.) return
     
     inquire(file='fields.dat',opened=o)
     if (.not.o) then
@@ -465,8 +316,12 @@ contains
        write(oFile,*) "# n = ",nLat," dx = ",dx
        write(oFile,*) "# Time Stepping parameters"
        write(oFile,*) "# dt = ",dt_, " dt_out = ",dtout_
+!       write(oFile,*) "# Model Parameters"
+!       write(oFile,*) "# nu = ",nu," g = ",gs, " w = ",omega
+!       write(oFile,*) "# rho = ", rho
+!       write(oFile,*) "# delta = ", del
     endif
-    
+
     gsq_fd(1) = 0.5_dl*( (fld(nLat,1)-fld(1,1))**2+(fld(2,1)-fld(1,1))**2 )
     gsq_fd(nLat) = 0.5_dl*( (fld(nLat-1,1)-fld(nLat,1))**2+(fld(nLat,1)-fld(1,1))**2  )
     gsq_fd(2:nLat-1) = 0.5_dl*( (fld(1:nLat-2,1)-fld(2:nLat-1,1))**2+(fld(3:nLat,1)-fld(2:nlat-1,1))**2 )
@@ -478,18 +333,9 @@ contains
 #else
     gsq(:) = 0._dl  ! tPair isn't created unless doing Fourier transforms
 #endif
-
-#ifdef SMOOTH
-!    w_box = 0._dl
-!    w_box(1:51) = 1._dl; w_box(nLat-50+1:nLat)=1._dl
-    call box_filter_r(nLat,50,w_box)
-    call make_fourier_window(w_box,wk,tPair)
-    call smooth_filter(f_sm,fld(:,1),wk,tPair)
-#endif
-    
     ! Fix this if I change array orderings
     do i=1,nLat
-       write(oFile,*) fld(i,:), gsq(i), 4._dl*nu*(-cos(fld(i,1)) + 0.5_dl*lambda**2*sin(fld(i,1))**2 - 1._dl), gsq_fd(i), 2._dl*nu*(-1.+lambda**2)*(fld(i,1)-0.5_dl*twopi)**2, f_sm(i)
+       write(oFile,*) fld(i,:), gsq(i), 4._dl*nu*(-cos(fld(i,1)) + 0.5_dl*lambda**2*sin(fld(i,1))**2 - 1._dl), gsq_fd(i), 2._dl*nu*(-1.+lambda**2)*(fld(i,1)-0.5_dl*twopi)**2
     enddo
     write(oFile,*)
     
