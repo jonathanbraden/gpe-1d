@@ -33,7 +33,7 @@ program Gross_Pitaevskii_1d
   call initialize_rand(87,18)
   call setup(nVar)
   do i=1,200
-     call initialise_fields(fld,nLat/8)
+     call initialise_fields(fld,nLat/8+1)
      call time_evolve(dx/alph,4*nlat*n_cross,128) ! Adjust this as needed
 !     call time_evolve(0.4_dl/omega,10000,100)
   enddo
