@@ -1,3 +1,6 @@
+# Temporary files
+*~
+
 # Compiled Object files
 *.slo
 *.lo
@@ -12,6 +15,9 @@
 *.exe
 *.out
 *.app
+
+# Python binaries
+*.pyc
 
 # Data Files
 *.dat
