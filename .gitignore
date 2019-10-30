@@ -27,3 +27,10 @@
 *.pdf
 *.ps
 *.png
+
+# Python Executables
+*.pyc
+*.npz
+
+# Backup Files
+*~

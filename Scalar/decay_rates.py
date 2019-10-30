@@ -408,6 +408,60 @@ if __name__=="__main__":
     base = 'runs/vary_lam/phi_0.4pi/'
     files_l_1 = [ base+'l%s/bubble-count.dat' %s for s in ['1.2','1.3','1.4','1.5','1.6'] ]
 
+"""
+# phi0 variation
+    phi = np.sqrt(0.5)*np.pi*np.array([0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6])
+
+    # These are for k_nyq/2 cut
+    tmin = np.array([25.,35.,40.,50.,60.,100.,100.])
+    tmax = np.array([35.,50.,80.,120.,200.,400.,400.])
+
+    act = np.array([0.7299,1.0897,1.45,1.8155,2.0002,2.1869])
+
+    # These are taken off the k_nyq cut, but will be used everywhere to start with, subject to fixing
+    fmin = np.array([0.05,0.05,0.05,0.05,0.05,0.5,0.8,0.94])
+    fmax = np.array([0.2,0.2,0.2,0.3,0.4,0.7,0.9,0.97])
+    thresh=-0.5; cut=-0.5
+    fD = ['p25','p30','p35','p40','p45','p50','p55','p60']
+### L=25, k_cut=k_nyq
+
+    dFile = 'runs/vary_phi0/l1.2/len25/kcut2/cos-traj-vary-phi0-len25-kc2-n2048.npz'
+    d_k2_25 = np.load(dFile); a_c = [ d_k2_25[s] for s in fD ]
+    gam_k2_l25 = -np.array( [ decay_rate_from_frac(a_c[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_c)) ])
+
+### L=25, k_cut=3*k_nyq/4    
+    dFile = 'runs/vary_phi0/l1.2/len25/kcut3o8/cos-traj-vary-phi0-len25-kc3o8-n2048.npz'
+    d_k3o8_25 = np.load(dFile); a_b = [ d_k3o8_25[s] for s in fD ]
+    gam_k3o8_l25 = -np.array( [ decay_rate_from_frac(a_b[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_b)) ])
+
+### L=25, k_cut=k_nyq/2
+    dFile = 'runs/vary_phi0/l1.2/len25/kcut4/cos-traj-vary-phi0-len25-kc4-n2048.npz'
+    d_k4_25 = np.load(dFile); a_a = [ d_k4_25[s] for s in fD ]
+    gam_k4_l25 = -np.array( [ decay_rate_from_frac(a_a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_a))])
+
+#### L = 12.5 ##########
+    fmin = np.array([0.05,0.05,0.05,0.2,0.53,0.84,0.96])
+    fmax = np.array([0.2,0.2,0.2,0.3,0.65,0.92,0.98])
+    thresh=-0.5; cut=-0.5
+    fD = ['p25','p30','p35','p40','p45','p50','p55']
+### L=12.5, k_cut=2
+    dFile = 'runs/vary_phi0/l1.2/len12.5/kcut2/cos-traj-vary-phi0-len12.5-kc2-n1024.npz'
+    d_k2_12 = np.load(dFile); a_a = [ d_k2_12[s] for s in fD ]
+    gam_k2_l12 = -np.array( [ decay_rate_from_frac(a_a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_a))])
+### Add the other spectral cuts here when they finish running
+
+    fD = ['p25','p30','p35','p40','p45','p50','p55','p60','p65']
+    fmin = np.array([0.05,0.05,0.05,0.05,0.05,0.05,0.5,0.5,0.96])
+    fmax = np.array([0.2,0.2,0.2,0.2,0.2,0.2,0.7,0.8,0.98])
+### L = 50, k_cut=2
+#    dFile = 'runs/vary_phi0/l1.2/len50/kcut2_old/cos-traj-vary-phi0-len50-kc2-n4096.npz'
+    fFile = 'runs/vary_phi0/l1.2/len50/kcut2/cos-traj-vary-phi0-len50-kc2-n4096.npz'
+    d = np.load(dFile); a = [ d[s] for s in fD ]
+    gam_k2_l50 = -np.array( [ decay_rate_from_frac(a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a))])
+### Add the other spectral cuts and fix the above one
+
+"""
+
 #    p_0,x_0,y_0 = scan_decay_rates(a,tmin,tmax,-0.5)
     
 #    d_p = get_trajectories(files_p,512)
