@@ -15,11 +15,8 @@ def quick_plot_traj(d,lv,**kwargs):
     fig, ax = plt.subplots()
     for i,tc in enumerate(t):
         ax.plot(dt*np.sort(tc[0]),np.linspace(0.,1.,tc[1])[:tc[0].size],label=lv[i])
-    plt.legend(loc='lower right',ncol=2)
-    ax.set_ylabel(r'$P_{\rm decay}$')
-    ax.set_xlabel(r'$\bar{t}$')
-    ax.set_ylim(-0.1,1.1)
-
+    ax.legend(loc='lower right',ncol=2)
+    _decay_labels(ax); ax.set_ylim(-0.1,1.1)
     return fig,ax
 
 def quick_plot_traj_survive(d,lv,dt=1.,**kwargs):
@@ -28,11 +25,51 @@ def quick_plot_traj_survive(d,lv,dt=1.,**kwargs):
     fig, ax = plt.subplots()
     for i,tc in enumerate(t):
         ax.plot(dt*np.sort(tc[0]),1.-np.linspace(0.,1.,tc[1])[:tc[0].size],label=lv[i])
-    plt.legend(loc='lower right',ncol=2)
-    ax.set_ylabel(r'$P_{\rm survive}$')
-    ax.set_xlabel(r'$\bar{t}$')
-    ax.set_ylim(-0.1,1.1)
+    ax.legend(loc='lower right',ncol=2)
+    _survive_labels(ax); ax.set_ylim(-0.1,1.1); ax.set_yscale('log')
+    return fig,ax
 
+def quick_plot_traj_survive_vary_thresh(d,lv,ns=3.,useStd=True,dt=1.,**kwargs):
+    """
+    Plot surviving trajectories using a threshold empirically determined by the initial
+    distribution in the ensemble
+    """
+    mean = np.array([ np.mean(dc[:,0]) for dc in d ])
+    std = np.array([ np.std(dc[:,0]) for dc in d ])
+    if useStd:
+        thresh = mean+ns*std
+    else:
+        thresh = mean*(1.+0.) # Fix this 
+    
+    t = [ extract_decay_times(dc,th=thresh[i],cut=thresh[i],**kwargs) for i,dc in enumerate(d) ]
+    fig, ax = plt.subplots()
+    for i,tc in enumerate(t):
+        ax.plot(dt*np.sort(tc[0]),1.-np.linspace(0.,1.,tc[1])[:tc[0].size],label=lv[i])
+    #ax.legend(loc='lower right',ncol=2)
+    _survive_labels(ax); ax.set_ylim(0.1,1.1); ax.set_yscale('log')
+    return fig,ax
+
+def plot_compare_vary_thresh(d_1,d_2,ns=5.,direct=True,**kwargs):
+    if (len(d_1) != len(d_2)):
+        print("Error, incompatible lengths")
+        return
+
+    mean_1 = np.array([ np.mean(dc[:,0]) for dc in d_1 ])
+    std_1 = np.array([ np.std(dc[:,0]) for dc in d_1 ])
+    thresh_1 = mean_1+ns*std_1
+    mean_2 = np.array([ np.mean(dc[:,0]) for dc in d_2 ])
+    std_2 = np.array([ np.std(dc[:,0]) for dc in d_2 ])
+    thresh_2 = mean_2+ns*std_2
+    
+    fig,ax = plt.subplots()
+    for i in range(len(d_1)):
+        im1 = d_1[i].shape[0]; im2 = d_2[i].shape[0]
+        if (direct):
+            im = min(im1,im2); im1=im; im2=im
+        t = extract_decay_times(d_1[i][:im1],th=thresh_1[i],cut=thresh_1[i],**kwargs)
+        ax.plot(np.sort(t[0]),1.-np.linspace(0.,1.,t[1])[:t[0].size])
+        t = extract_decay_times(d_2[i][:im2],th=thresh_2[i],cut=thresh_2[i],**kwargs)
+        ax.plot(np.sort(t[0]),1.-np.linspace(0.,1.,t[1])[:t[0].size],'--')
     return fig,ax
 
 def _decay_labels(ax):
@@ -57,6 +94,7 @@ def extract_decay_times(d,th=-0.8,cut=-0.5,interp=False,dt=1.,**kwargs):
     if interp:
         t = ti + np.sign(ti)*(th - d[td,ti]) / (d[td,ti] - d[td,ti-1]) 
         t = t[0]
+        #t[np.where(ti == 0)] = 0.
     else:
         t = ti
     return dt*t, d.shape[0]
@@ -64,7 +102,6 @@ def extract_decay_times(d,th=-0.8,cut=-0.5,interp=False,dt=1.,**kwargs):
 def extract_decay_bounds(d,th=-0.8,cut=-0.5,dt=1.):
     td = np.where(np.max(d[:,:],axis=-1) > cut)
     ti = np.argmax(d[td,:] > th,axis=-1)[0]
-
     return dt*ti, d.shape[0]
 
 def get_new_decays(d,th=-0.8,cut=-0.5):
@@ -104,22 +141,6 @@ def quick_plot_len_scale(files,lv,t0=40.):
     ax.set_xlabel(r'$\bar{t}$')
     ax.set_ylim(-0.1,1.1)
 
-    return fig,ax
-
-def plot_compare(d_1,d_2,direct=True,**kwargs):
-    if (len(d_1) != len(d_2)):
-        print("Error, incompatible lengths")
-        return
-
-    fig,ax = plt.subplots()
-    for i in range(len(d_1)):
-        im1 = d_1[i].shape[0]; im2 = d_2[i].shape[0]
-        if (direct):
-            im = min(im1,im2); im1=im; im2=im
-        t = extract_decay_times(d_1[i][:im1],**kwargs)
-        ax.plot(np.sort(t[0]),1.-np.linspace(0.,1.,t[1])[:t[0].size])
-        t = extract_decay_times(d_2[i][:im2],**kwargs)
-        ax.plot(np.sort(t[0]),1.-np.linspace(0.,1.,t[1])[:t[0].size],'--')
     return fig,ax
 
 def plot_thresh_scan(d,tv,**kwargs):
@@ -175,6 +196,7 @@ def scan_decay_rates(d,tmin,tmax,**kwargs):
     return p,x,y
 
 # Make this more efficient with where statements
+# Add some fixes for out of range issues
 def decay_rate_from_survive(d,tmin,tmax,**kwargs):
     t = extract_decay_times(d,**kwargs)
     x = np.sort(t[0]); y = np.log(1.-np.linspace(0.,1.,t[1])[:x.size])
@@ -187,18 +209,15 @@ def decay_rate_from_frac(d,fmin,fmax,**kwargs):
     imin = np.argmax(y<fmax); imax = np.argmax(y<fmin)
     y = np.log(y[:x.size])
     return np.polyfit(x[imin:imax],y[imin:imax],1), x, y
-    
-def get_single_bubbles(d):
-    """
-    Set a constraint on the allowed slope to try and only obtain single bubble nucleations
-    """
-    return
 
 def get_fv_rms(d):
     """
     Get the extraction threshold based on an empirical determination of the RMS
     """
     return np.array([np.std(dc[:,0]) for dc in d])
+
+def get_thresh(dc,ns):
+    return np.mean(dc[:,0])+ns*np.std(dc[:,0])
 
 def instanton_rate(act,phi):
     return np.exp(-2.*np.pi*phi**2*act)*2.*np.pi*act*phi**2
@@ -208,6 +227,12 @@ def instanton_rate_0th(act,phi):
     Decay rate ignoring scaling behaviour of determinant.  Normalised to unity when phi=1
     """
     return np.exp(-2.*np.pi*phi**2*act)*2.*np.pi*act
+
+def get_single_bubbles(d):
+    """
+    Set a constraint on the allowed slope to try and only obtain single bubble nucleations
+    """
+    return
 
 def create_binary(fName,files,n,dt,dx):
     d = get_trajectories(files,n)
@@ -227,7 +252,74 @@ def merge_L50_runs(dt,dx,kv='2'):
     d55 = merge_directories([base+'phi_0.55pi%s/bubble-count.dat' %s for s in ['','_run2','_run3','_run4']],512)
     d50 = merge_directories([base+'phi_0.5pi%s/bubble-count.dat' %s for s in ['','_run2']],256)
     np.savez('cos-traj-vary-phi0-len50-kc'+kv+'-n4096.npz',dt=[dt],dx=[dx],p25=d[0],p30=d[1],p35=d[2],p40=d2[0],p45=d2[1],p50=d50,p55=d55,p60=d60,p65=d65)
+    
+def get_decay_rates_early_time():
+    # phi0 variation
+    phi = np.sqrt(0.5)*np.pi*np.array([0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6])
+    
+    # These are for k_nyq/2 cut
+    tmin = np.array([25.,35.,40.,50.,60.,100.,100.])
+    tmax = np.array([35.,50.,80.,120.,200.,400.,400.])
+    
+    act = np.array([0.7299,1.0897,1.45,1.8155,2.0002,2.1869])
+    
+    # These are taken off the k_nyq cut, but will be used everywhere to start with, subject to fixing
+    fmin = np.array([0.05,0.05,0.05,0.05,0.05,0.5,0.8,0.94])
+    fmax = np.array([0.2,0.2,0.2,0.3,0.4,0.7,0.9,0.97])
+    thresh=-0.5; cut=-0.5
+    fD = ['p25','p30','p35','p40','p45','p50','p55','p60']
 
+    ### L=25, k_cut=k_nyq
+    dFile = 'runs/vary_phi0/l1.2/len25/kcut2/cos-traj-vary-phi0-len25-kc2-n2048.npz'
+    d_k2_25 = np.load(dFile); a_c = [ d_k2_25[s] for s in fD ]
+    gam_k2_l25 = -np.array( [ decay_rate_from_frac(a_c[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_c)) ])
+    
+    ### L=25, k_cut=3*k_nyq/4    
+    dFile = 'runs/vary_phi0/l1.2/len25/kcut3o8/cos-traj-vary-phi0-len25-kc3o8-n2048.npz'
+    d_k3o8_25 = np.load(dFile); a_b = [ d_k3o8_25[s] for s in fD ]
+    gam_k3o8_l25 = -np.array( [ decay_rate_from_frac(a_b[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_b)) ])
+
+    ### L=25, k_cut=k_nyq/2
+    dFile = 'runs/vary_phi0/l1.2/len25/kcut4/cos-traj-vary-phi0-len25-kc4-n2048.npz'
+    d_k4_25 = np.load(dFile); a_a = [ d_k4_25[s] for s in fD ]
+    gam_k4_l25 = -np.array( [ decay_rate_from_frac(a_a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_a))])
+
+    #### L = 12.5 ##########
+    fmin = np.array([0.05,0.05,0.05,0.2,0.53,0.84,0.96])
+    fmax = np.array([0.2,0.2,0.2,0.3,0.65,0.92,0.98])
+    thresh=-0.5; cut=-0.5
+    fD = ['p25','p30','p35','p40','p45','p50','p55']
+
+    ### L=12.5, k_cut=2
+    dFile = 'runs/vary_phi0/l1.2/len12.5/kcut2/cos-traj-vary-phi0-len12.5-kc2-n1024.npz'
+    d_k2_12 = np.load(dFile); a_a = [ d_k2_12[s] for s in fD ]
+    gam_k2_l12 = -np.array( [ decay_rate_from_frac(a_a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a_a))])
+    ### Add the other spectral cuts here when they finish running
+
+    fD = ['p25','p30','p35','p40','p45','p50','p55','p60','p65']
+    fmin = np.array([0.05,0.05,0.05,0.05,0.05,0.05,0.5,0.5,0.96])
+    fmax = np.array([0.2,0.2,0.2,0.2,0.2,0.2,0.7,0.8,0.98])
+
+    ### L = 50, k_cut=2
+    dFile = 'runs/vary_phi0/l1.2/len50/kcut2_old/cos-traj-vary-phi0-len50-kc2-n4096.npz'
+    d = np.load(dFile); a = [ d[s] for s in fD ]
+    gam_k2_l50 = -np.array( [ decay_rate_from_frac(a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a))])
+    ### Add the other spectral cuts and fix the above one
+    return
+
+def get_decay_rates_late_time():
+    dFile = 'cos-traj-vary-phi0-len25-kc2-n2048.npz'
+    fD = ['p40','p45','p50','p55','p60']
+    ti = np.array([ [20., 45., 100., 100.,80.],
+                    [20.,40.,100.,100.,80.]
+    ])
+    tf = np.array([ [40.,63.,175.,256.,256.],
+                    [40.,75.,200.,256.,256.]
+    ])
+
+    data = np.load(dFile); a = [ d[s] for s in fD ]
+    return
+    
 if __name__=="__main__":
     dt = 1.5440808887540916; dx = 0.19301011109426144
 
@@ -316,6 +408,7 @@ if __name__=="__main__":
     base = 'runs/vary_lam/phi_0.4pi/'
     files_l_1 = [ base+'l%s/bubble-count.dat' %s for s in ['1.2','1.3','1.4','1.5','1.6'] ]
 
+"""
 # phi0 variation
     phi = np.sqrt(0.5)*np.pi*np.array([0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6])
 
@@ -367,10 +460,10 @@ if __name__=="__main__":
     gam_k2_l50 = -np.array( [ decay_rate_from_frac(a[i],fmin[i],fmax[i],th=thresh,cut=cut,interp=True)[0][0] for i in range(len(a))])
 ### Add the other spectral cuts and fix the above one
 
+"""
 
 #    p_0,x_0,y_0 = scan_decay_rates(a,tmin,tmax,-0.5)
     
-
 #    d_p = get_trajectories(files_p,512)
 #    p_0,x_0,y_0 = scan_decay_rates(d_p,tmin,tmax,-0.5)
 #    p_1,x_1,y_1 = scan_decay_rates(d_p,tmin,tmax,-0.6)

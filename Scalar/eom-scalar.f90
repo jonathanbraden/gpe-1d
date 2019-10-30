@@ -25,12 +25,12 @@ module eom
 #endif
   implicit none
 
-  integer, parameter :: nFld = 1, nLat = 512
+  integer, parameter :: nFld = 1, nLat = 128
   integer, parameter :: nVar = 2*nFld*nLat+1
   real(dl), dimension(1:nVar), target :: yvec
 
   real(dl), parameter :: nu = 2.e-3
-  real(dl), parameter :: omega = 50._dl*2._dl*nu**0.5, del = (nu/2._dl)**0.5*(1._dl+0.55_dl)
+  real(dl), parameter :: omega = 0.25*50._dl*2._dl*nu**0.5, del = (nu/2._dl)**0.5*(1._dl+0.2_dl)
   real(dl), parameter :: len = 0.5*50._dl / (2.*nu)**0.5, dx = len/dble(nLat), dk = twopi/len
   real(dl), parameter :: rho = 2.**(-3)*200._dl*2._dl*(nu)**0.5
 
