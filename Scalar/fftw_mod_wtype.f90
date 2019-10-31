@@ -158,13 +158,12 @@ contains
   function create_transform_1d(n)
     type(transformPair1D) :: create_transform_1d
     integer, intent(in) :: n
-    
+
     call allocate_1d_array(n, RSPACE1D, SSPACE1D, create_transform_1d%rPtr, create_transform_1d%sPtr)
     create_transform_1d%nx = n
-    
+
     create_transform_1d%planf = fftw_plan_dft_r2c_1d(n, RSPACE1D, SSPACE1D, FFTW_MEASURE)
     create_transform_1d%planb = fftw_plan_dft_c2r_1d(n, SSPACE1D, RSPACE1D, FFTW_MEASURE)
-    
   end function create_transform_1d
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -178,11 +177,10 @@ contains
   subroutine initialize_transform_1d(this, n)
     type(transformPair1D), intent(out) :: this
     integer, intent(in) :: n
-    
-    this%nx = n
-    this%nnx = n/2 + 1
+
+    this%nx = n; this%nnx = n/2 + 1
     call allocate_1d_array(n, this%realSpace, this%specSpace, this%rPtr , this%sPtr)
-    
+
     this%planf = fftw_plan_dft_r2c_1d(n, this%realSpace, this%specSpace, FFTW_MEASURE)
     this%planb = fftw_plan_dft_c2r_1d(n, this%specSpace, this%realSpace, FFTW_MEASURE)
   end subroutine initialize_transform_1d
@@ -196,7 +194,7 @@ contains
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   subroutine destroy_transform_1d(this)
     type(transformPair1D), intent(inout) :: this
-    
+
     call fftw_destroy_plan(this%planf); call fftw_destroy_plan(this%planb)
     call fftw_free(this%rPtr); call fftw_free(this%sPtr)
   end subroutine destroy_transform_1d
@@ -219,9 +217,9 @@ contains
     
     this%nx = n(1); this%ny = n(2)
     this%nnx = n(1)/2+1; this%nny = n(2)/2+1
-    
+
     call allocate_2d_array(n(1),n(2),this%realSpace,this%specSpace,this%rPtr,this%sPtr)
-    
+
     this%planf = fftw_plan_dft_r2c_2d(n(2),n(1),this%realSpace,this%specSpace,FFTW_MEASURE)
     this%planb = fftw_plan_dft_c2r_2d(n(2),n(1),this%specSpace,this%realSpace,FFTW_MEASURE)
   end subroutine initialize_transform_2d
@@ -307,7 +305,7 @@ contains
     
     integer :: LL
     LL = L/2+1
-    
+
     fptr = fftw_alloc_real(int(L, C_SIZE_T)); call c_f_pointer(fptr, arr, [L])
     fkptr = fftw_alloc_complex(int(L, C_SIZE_T)); call c_f_pointer(fkptr, Fk, [LL])
   end subroutine allocate_1d_array
@@ -340,11 +338,10 @@ contains
 
   subroutine allocate_2d_array(L,M, arr, Fk, fptr, fkptr)
     integer :: L,M
-    
     real(C_DOUBLE), pointer :: arr(:,:)
     complex(C_DOUBLE_COMPLEX), pointer :: Fk(:,:)
     type(C_PTR) :: fptr, fkptr
-    
+
     integer :: LL
 
     LL = L/2+1
@@ -357,15 +354,14 @@ contains
 
   subroutine allocate_3d_array(L,M,N, arr, Fk)
     integer :: L,M,N
-      
     real(C_DOUBLE), pointer :: arr(:,:,:)
     complex(C_DOUBLE_COMPLEX), pointer :: Fk(:,:,:)
     
     type(C_PTR) :: fptr, fkptr
     integer :: LL
-    
+
     LL = L/2+1
-    
+
     fptr = fftw_alloc_real(int(L*M*N, C_SIZE_T)); call c_f_pointer(fptr, arr, [L,M,N])
     fkptr = fftw_alloc_complex(int(LL*M*N, C_SIZE_T)); call c_f_pointer(fkptr, Fk, [LL,M,N])
   end subroutine allocate_3d_array
@@ -397,7 +393,7 @@ contains
     real(dl), intent(in) :: dk
     integer :: i
     complex(C_DOUBLE_COMPLEX) :: norm
-    
+
     norm = -iImag / dk / dble(tPair%nx)
     call fftw_execute_dft_r2c(tPair%planf, tPair%realSpace, tPair%specSpace)
     do i=2,tPair%nnx
@@ -407,7 +403,6 @@ contains
     call fftw_execute_dft_c2r(tPair%planb, tPair%specSpace, tPair%realSpace)
   end subroutine inverse_derivative_1d_wtype
 
-  !
   subroutine derivative_1d_wtype(tPair, dk)
     type(transformPair1D), intent(inout) :: tPair
     real(dl), intent(in) :: dk
@@ -459,7 +454,7 @@ contains
     
     integer :: i
     complex(C_DOUBLE_COMPLEX) :: norm
-    
+
     norm = ( dk * iImag )**order / dble(tPair%nx)
     call fftw_execute_dft_r2c(tPair%planf, tPair%realSpace, tPair%specSpace)
     do i=1,tPair%nnx
@@ -485,7 +480,7 @@ contains
     real(dl), intent(in) :: dk
     integer :: i
     complex(C_DOUBLE_COMPLEX) :: norm
-    
+
     norm = iImag*dk / dble(tPair%nx)
     call fftw_execute_dft_r2c(tPair%planf, tPair%realSpace, tPair%specSpace)
     do i=1,tPair%nnx
@@ -528,7 +523,7 @@ contains
     
     tPair%realSpace = ftmp*tPair%realSpace
   end subroutine grad_adotb_1d_wtype
-  
+
 ! To add : allocate and initialize inplace/outofplace FFTW plans
 ! To add : extend this to work with MPI
 
