@@ -183,7 +183,7 @@ contains
   !> @arg Actually implement this
   !> @arg Fill in the documentation once this is done
   subroutine generate_correlated_1dGRF(fields, spec, corr)
-    complex(C_DOUBLE_COMPLEX), intent(inout), dimension(:) :: fields
+    complex(C_DOUBLE_COMPLEX), intent(inout), dimension(:,:) :: fields
     real(dl), intent(in) :: spec(1:2), corr
 
     real(dl), allocatable, dimension(:) :: amp, phase

@@ -8,7 +8,10 @@ BENCH_FINE = F
 BLAS = F
 
 # Default FFTW Lib location
-FFTW_DIR = /share/apps/fftw-3.3.5/
+#FFTW_DIR = /share/apps/fftw-3.3.5/
+#FFTW_INC = -I$(FFTW_DIR)include/
+#FFTW_LIB = -L$(FFTW_DIR)lib/
+FFTW_DIR = /opt/fftw/3.3.5-gcc-5.4.0-openmpi-2.0.0/
 FFTW_INC = -I$(FFTW_DIR)include/
 FFTW_LIB = -L$(FFTW_DIR)lib/
 
