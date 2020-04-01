@@ -76,7 +76,7 @@ ifeq ($(BENCH_FINE),T)
 endif
 
 #OBJS = constants.o my_clock.o fftw_mod_wtype.o random_field.o eom.o integrator.o
-OBJS = constants.o fftw_mod_wtype.o random_field.o eom-scalar.o integrator.o bubble-extraction.o
+OBJS = constants.o utils.o fftw_mod_wtype.o random_field.o fluctuations.o eom-scalar.o integrator.o bubble-extraction.o
 
 scalar: %: $(OBJS) evolve-scalar.o
 	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -o scalar-1d evolve-scalar.o $(OBJS) $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)

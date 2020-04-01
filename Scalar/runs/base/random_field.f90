@@ -204,13 +204,13 @@ contains
     call random_number(phase(1:n))
     deviate = -sqrt(log(amp))*exp(iImag*twopi*phase)
 
-    fields = deviate
+!    fields = deviate
 ! Hmm, I don't think this works the way I want it to...
 !    fields = dreal(deviate)*spec(:,1) + iImag*dimag(deviate)*spec(:,2)
 ! To Do : add in the correlation
 
     ! This line throws a compiler warning
-    plan_inv = fftw_plan_dft_1d(n,fields,fields,FFTW_BACKWARD,FFTW_ESTIMATE)
+!    plan_inv = fftw_plan_dft_1d(n,fields,fields,FFTW_BACKWARD,FFTW_ESTIMATE)
 !    call fftw_
   end subroutine generate_correlated_1dGRF
 

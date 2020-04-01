@@ -1,167 +1,178 @@
-module fluctuations
+module Fluctuations
   use, intrinsic :: iso_c_binding
   use constants, only : dl, twopi
   use gaussianRandomField
-  
-  implicit none
-  complex(C_DOUBLE_COMPLEX), parameter :: iImag = (0._dl,1._dl)  ! define this as a private constant
 
-  !>@brief
-  !> Basic interface for writing function to return a spectrum
-  abstract interface
-     real(dl) function spec_null(k)
-       use constants, only : dl
-       real(dl), intent(in) :: k
-     end function spec_null
-  end interface
-
-  !>@brief
-  !> Basic interface for writing full correlation information
-  abstract interface
-     function corr_null(k,nf)
-       use constants, only : dl
-       real(dl), dimension(1:nf,1:nf) :: corr_fun
-       real(dl), intent(in) :: k
-       integer, intent(in) :: nf
-     end function corr_null
-  end interface
+  implicit none 
 
 contains
 
+  ! Add preprocessor for array ordering in case I change it
   !>@brief
-  !> Generate a realisation of a GRF with the spectrum specified by the 
-  !> input function
-  subroutine initial_fluctuations(dfld,spec)
-    real(dl), dimension(:,:), intent(out) :: dfld
-    procedure(spec_null) :: spec
-  end subroutine initial_fluctuations
-
-  !>@brief
-  !> Generate a set of correlated GRFs with specified covariance matrix
-  !> in spectral space.
-  subroutine initial_fluctuations_correlated(dfld,corr,nf,n,dk)
-    real(dl), dimension(:,:), intent(out) :: dfld
-    integer, intent(in) :: nf, n
-    real(dl), intent(in) :: dk
-    procedure(corr_null) :: corr
-
-    integer :: i, nn
-    real(dl) :: norm, k
-    complex(C_DOUBLE_COMPLEX) :: Fk(1:n/2+1,1:nf), deviate
-    real(dl), dimension(1:nf,1:nf) :: chol
-    real(dl), dimension(1:nf) :: amp, phase
-
-    ! Need to initialise random numbers here
-
-    nn = n/2+1
-    norm = 1._dl  ! Fix this
-    do i=1,nn
-       k = dk*(i-1); chol = corr(k,nf)
-       ! call DPOTRF('L')   ! Do Cholesky decomposition
-       call random_number(amp(1:nf)); call random_number(phase(1:nf))
-       Fk(i,:) = matmul(chol,sqrt(-log(amp))*exp(iImag*twopi*phase)
-    enddo
-
-    ! Fourier transform the fields back.  Worth doing multiple in parallel?
-  end subroutine initial_fluctuations_correlated
-
-  !>@brief
-  !> Create a spectrum suitable for use in GRF generation from a function specifying the spectrum
-  function create_spectrum(spec,n,dk) result(s)
-    real(dl), dimension(1:n/2+1) :: s
-    procedure(spec_null) :: spec
-    integer, intent(in) :: n
-    real(dl), intent(in) :: dk
-
-    integer :: i
-    do i=1,n/2+1; s(i) = spec((i-1)*dk); enddo
-  end function create_spectrum
-
-  subroutine initialise_fluctuations(fld,type,kmax,phi0)
+  !> Initialise fluctuations in linear perturbation theory approximation
+  !>
+  !> type : (1) sets vacuum,
+  !>        (2) thermal+vacuum, 
+  !>        (3) only thermal, 
+  !>        (4) high-T thermal approximation
+  subroutine initialize_linear_fluctuations(fld,len,m2,temp,type,kmax,phi0,klat)
     real(dl), dimension(:,:), intent(inout) :: fld
-    integer, intent(in) :: type  ! Turn this into a string
-    integer, intent(in), optional :: kmax
+    real(dl), intent(in) :: len, m2, temp
+    integer, intent(in) :: type
+    integer, intent(in), optional :: kmax, klat
+    real(dl), intent(in), optional :: phi0
 
-    integer :: km
+    real(dl), dimension(1:size(fld(:,1))) :: df
+    real(dl), dimension(1:size(fld(:,1))/2+1) :: spec, w2eff
+    integer :: km, kc; real(dl) :: phiL, norm
+    integer :: i,nn
 
-    ! Need to include spec
+    nn = size(spec)
     km = size(spec); if (present(kmax)) km = kmax
-    phiL = 0.5_dl; if (present(phi0)) phiL = phi0
+    kc = size(spec); if (present(klat)) kc = klat
+    phiL = twopi; if (present(phi0)) phiL = phi0
 
-    select case(type)
-       case(1)
-          ! Minkowski
-       case(2)
-          ! Thermal
-       case(3)
-          ! Thermal High-T
-  end subroutine initialise_fluctuations
+    norm = (0.5_dl)**0.5 / phiL / sqrt(len)  ! Check the Box-Mueller normalisation
 
-  subroutine initialise_fluctuations_vacuum(fld)
-    real(dl), dimension(:,:), intent(inout) :: fld
-  end subroutine initialise_fluctuations_vacuum
-
-  subroutine initialise_fluctuations_thermal(fld)
-    real(dl), dimension(:,:), intent(inout) :: fld
-  end subroutine initialise_fluctuations_thermal
-
-  subroutine initialise_fluctuations_high_temp()
-  end subroutine initialise_fluctuations_high_temp
-
-  subroutine initialise_fluctuations_fields()
-  end subroutine initialise_fluctuations_fields
-
-  subroutine initialise_fluctuations_momenta()
-  end subroutine initialise_fluctuations_momentua
-
-! Temporary GRF generation goes here.  Once debugged, move into separate module
-  subroutine correlated_GRF_1D_real(df,nlat,nf,spec)
-    real(dl), dimension(1:n,1:nf), intent(out) :: df
-    integer, intent(in) :: nlat, nf
-    real(dl), intent(in), dimension(1:nf,1:nf) :: spec  ! Make this a function I pass in
-    
-    integer :: nn, nnk
-    real(dl) :: amp, phase
-    complex(dl) :: deviate
-    complex(C_DOUBLE_COMPLEX), allocatable :: Fk(:,:,:)
-    type(C_PTR) :: fft_plan
-
-    integer :: i
-    integer :: info
-    ! Storage for CHOLESKY decompostion
-    real(dl), dimension(1:nf,1:nf) :: chol
-
-    call initialize_rand(75,13)  !!! To Do: Actually make this random
-
-    nn = nlat/2+1
-    nnk = nn  ! Modify to allow for spectral cuts
-    allocate(Fk(1:nn,1:nf,1:nf))
-
-    ! Do either Cholesky decomposition or eigendecomposition of correlation function
-    ! DPOTRF is LAPACK routine
-    ! DPPTRF used packed storage
-
-    ! As a check, can also do diagonalisation of matrix
-
-    do i=2,nnk
-       chol = spec(i)
-       ! call DPOTRF('L',nf,chol,nf,info)  ! Check upper vs lower
-       ! if (info .ne. 0) ! Check for errors
-       call random_number(amp); call random_number(phase)
-       ! Get complex Gaussian realisations via random numbers
-       deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)     ! Check normalisation here
-       Fk(i,1:nf) = matmul(chol,deviate)
+    do i=1,nn
+       w2eff(i) = m2 + (twopi/len)**2*(i-1)**2
     enddo
-    Fk(1) = 0._dl
-    Fk(nnk+1:nn) = 0._dl
+    spec = 0._dl
 
-    fft_plan = fftw_plan_dft_c2r_1d(nlat,Fk,df,FFTW_ESTIMATE)  ! This is wrong for the multifield FFT
-    call fftw_execute_dft_c2r(fft_plan,Fk,df)                  ! Also wrong for multifield FFT
-  end subroutine correlated_GRF_1D
+    select case (type)  ! To Do: Add higher-order high-T corrections
+       case (1)  ! Vacuum fluctuations
+          spec(2:) = norm / w2eff(2:)**0.25 / sqrt(2._dl)
+       case (2)  ! Thermal + Vacuum
+          spec(2:) = norm / w2eff(2:)**0.25 * sqrt(1._dl/(exp(w2eff(2:)**0.5/temp)-1._dl)+0.5_dl)
+       case (3)  ! Only Thermal
+          spec(2:) = norm / w2eff(2:)**0.25 * sqrt(1._dl/(exp(w2eff(2:)**0.5/temp)-1._dl))
+       case (4)  ! Leading order high-T approximation
+          spec(2:) = norm / w2eff(2:)**0.5 * sqrt(temp)
+       case default
+          print*,"Invalid fluctuation choice ",type,".  Defaulting to vacuum."
+    end select
 
-  subroutine convolve_GRF_1D(df,nlat,nf)
-    real(dl), dimension(1:n,1:nf), intent(out) :: df
-    integer, intent(in) :: nlat, nf
-  end subroutine convolve_GRF_1D
+    call generate_1dGRF(df,spec(1:kc),.false.)  ! check if this is correct
+    fld(:,1) = fld(:,1) + df(:)
 
-end module fluctuations
+    spec = spec*w2eff**0.5
+    call generate_1dGRF(df,spec(1:kc),.false.)
+    fld(:,2) = fld(:,2) + df(:)
+  end subroutine initialize_linear_fluctuations
+
+  !>@brief
+  !> Initialise fluctuations using eigenmodes of given field profile
+  !
+  !> TO DO: I really need the derivative operator, so it's probably better to pass in the full
+  !>        linear operator
+  subroutine initialize_fluctuations_eigenmodes(f,L0)
+    real(dl), dimension(:,:), intent(in) :: f
+    real(dl), dimension(:,:), intent(in) :: L0
+
+    real(dl), dimension(1:size(f),1:size(f)) :: emodes
+    real(dl), dimension(1:size(f))  :: evals
+  end subroutine initialize_fluctuations_eigenmodes
+
+  subroutine initialize_bogoliubov_fluctuations(fld)
+    real(dl), dimension(:,:), intent(inout) :: fld
+  end subroutine initialize_bogoliubov_fluctuations
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+! Subroutines for constrained fluctuations
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !>@brief
+  !> Resample fluctuations outside of the specified band
+  subroutine constrained_fluctuations(fld,imin,imax,ns)
+    real(dl), dimension(:,:), intent(inout) :: fld
+    integer, intent(in) :: imin, imax, ns
+
+    real(dl), dimension(1:size(fld(:,1))/2+1) :: spec
+  end subroutine constrained_fluctuations
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+! These have been combined into the single function above
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  !>@brief
+  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
+  !> Spectra in this subroutine are truncated for direct comparison of 
+  !> fluctuations generated between lattices of varying size.
+  !
+  ! TO DO: Add an option to instead directly compare lattices of the same size with different spectral cuts
+  subroutine initialize_vacuum_fluctuations(fld,len,m2,kmax,phi0,klat)
+    real(dl), dimension(:,:), intent(inout) :: fld
+    real(dl), intent(in) :: len, m2
+    integer, intent(in), optional :: kmax, klat
+    real(dl), intent(in), optional :: phi0
+
+    real(dl), dimension(1:size(fld(:,1))) :: df
+    real(dl), dimension(1:size(fld(:,1))/2+1) :: spec, w2eff
+    integer :: km, kc
+    integer :: i, nn
+    real(dl) :: phiL, norm
+
+    nn = size(spec)
+    km = size(spec); if (present(kmax)) km = kmax
+    kc = size(spec); if (present(klat)) kc = klat
+    phiL = twopi; if (present(phi0)) phiL = phi0
+    
+    norm = (0.5_dl)**0.5 / phiL / sqrt(2._dl) / sqrt(len) ! second factor of 1/sqrt(2) is normalising the Box-Mueller, first one is from 1/sqrt(2\omega)
+
+    do i=1,nn
+       w2eff(i) = m2 + (twopi/len)**2*(i-1)**2
+    enddo
+    spec = 0._dl
+    spec(2:) = norm / w2eff(2:)**0.25
+    call generate_1dGRF(df,spec(1:kc),.false.)
+    fld(:,1) = fld(:,1) + df(:)
+
+    spec = spec * w2eff**0.5
+    call generate_1dGRF(df,spec(1:kc),.false.)
+    fld(:,2) = fld(:,2) + df(:)
+  end subroutine initialize_vacuum_fluctuations
+  
+  !>@brief
+  !> Initialise Minkowski Gaussian vacuum approximation for fluctuations.
+  !> Spectra in this subroutine are truncated for direct comparison of 
+  !> fluctuations generated between lattices of varying size.
+  !
+  ! TO DO: Fix nonlocality with len, m2eff, nlat, etc
+  ! TO DO: Add an option to instead directly compare lattices of the same size with different spectral cuts
+  subroutine initialize_thermal_fluctuations(fld,len,m2,temp,kmax,phi0,klat)
+    real(dl), dimension(:,:), intent(inout) :: fld
+    real(dl), intent(in) :: len, m2
+    real(dl), intent(in) :: temp
+    integer, intent(in), optional :: kmax, klat
+    real(dl), intent(in), optional :: phi0
+
+    real(dl), dimension(1:size(fld(:,1))) :: df
+    real(dl), dimension(1:size(fld(:,1))/2+1) :: spec, w2eff
+    integer :: i,km,kc, nn
+    real(dl) :: phiL, norm
+
+    nn = size(spec)
+    km = size(spec); if (present(kmax)) km = kmax
+    kc = size(spec); if (present(klat)) kc = klat
+    phiL = twopi; if (present(phi0)) phiL = phi0
+    
+    norm = (0.5_dl)**0.5 / phiL / sqrt(len) ! second factor of 1/sqrt(2) is normalising the Box-Mueller, first one is from 1/sqrt(2\omega)
+    ! Fix the nonlocality of the length
+
+    do i=1,nn
+       w2eff(i) = m2 + (twopi/len)**2*(i-1)**2  ! nonlocality
+    enddo
+    spec = 0._dl
+    spec(2:) = norm / w2eff(2:)**0.25*sqrt(1._dl/(exp(w2eff(2:)**0.5/temp)-1._dl) + 0.5_dl)  ! Add special cases for eval of exponential in here
+    call generate_1dGRF(df,spec(1:kc),.false.)
+    fld(:,1) = fld(:,1) + df(:)
+
+    spec = spec * w2eff**0.5
+    call generate_1dGRF(df,spec(1:kc),.false.)
+    fld(:,2) = fld(:,2) + df(:)
+  end subroutine initialize_thermal_fluctuations
+ 
+end module Fluctuations
