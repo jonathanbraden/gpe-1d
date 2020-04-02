@@ -27,20 +27,21 @@ program Gross_Pitaevskii_1d
   end type SimParams
   type(SimParams) :: sim
 
+! What needs fixing, set phi0 out here, allow m^2 to vary from vacuum value, etc.
 
-  call set_lattice_params(512,25._dl*sqrt(2._dl),1)
-  call set_model_params(sqrt(2._dl),1.55_dl)
-  
+  call set_lattice_params(1024,50._dl,1)
+  call set_model_params(0.5_dl,100._dl)
+ 
   fld(1:nLat,1:2) => yvec(1:2*nLat*nFld)
   time => yvec(2*nLat*nFld+1)
-  alph = 4._dl; n_cross = 2
+  alph = 16._dl; n_cross = 8
 
   call initialize_rand(87,18)
   call setup(nVar)
 
   do i=1,1
-     call initialise_fields(fld,nLat/8+1)
-     call time_evolve(dx/alph,4*nlat*n_cross,128)
+     call initialise_fields(fld,nLat/4+1)
+     call time_evolve(dx/alph,4*nlat*n_cross,128*4)
   enddo
  
 !  call forward_backward_evolution(0.4_dl/omega,10000,100)
@@ -53,7 +54,7 @@ contains
   subroutine setup(nVar)
     integer, intent(in) :: nVar
     call init_integrator(nVar)
-    call initialize_transform_1d(tPair,nLat)
+    call initialize_transform_1d(tPair,nLat)  ! nonlocality
   end subroutine setup
 
   subroutine time_evolve(dt,ns,no)
@@ -202,7 +203,7 @@ contains
   !> Initialise the field to have mean value given by the false vacuum and no mean velocity 
   subroutine initialise_mean_fields(fld)
     real(dl), dimension(:,:), intent(out) :: fld
-    fld(:,1) = 0.5_dl*twopi
+    fld(:,1) = phi_fv()
     fld(:,2) = 0._dl
   end subroutine initialise_mean_fields
   
@@ -257,12 +258,14 @@ contains
     gsq(:) = 0._dl  ! tPair isn't created unless doing Fourier transforms
 #endif
     ! Fix this if I change array orderings
-    do i=1,nLat
-!       write(oFile,*) fld(i,:), gsq(i), 4._dl*nu*(-cos(fld(i,1)) + 0.5_dl*lambda**2*sin(fld(i,1))**2 - 1._dl), gsq_fd(i), 2._dl*nu*(-1.+lambda**2)*(fld(i,1)-0.5_dl*twopi)**2
-       write(oFile,*) fld(i,:), gsq(i), (-cos(fld(i,1)) + 0.5_dl*lambda**2*sin(fld(i,1))**2 - 1._dl), gsq_fd(i), (-1.+lambda**2)*(fld(i,1)-0.5_dl*twopi)**2  ! What's the last element? Quadratic approx?  And how is it normed?
+    do i=1,size(fld(:,1))
+       write(oFile,*) fld(i,:), gsq(i), v(fld(i,1)), gsq_fd(i), 0.5_dl*m2eff*(fld(i,1)-phi_fv())**2 
     enddo
     write(oFile,*)
     
+    print*,"conservation :", sum(0.5_dl*gsq(:)+v(fld(:,1))+0.5_dl*fld(:,2)**2), sum(0.5_dl*gsq_fd(:)+v(fld(:,1))+0.5_dl*fld(:,2)**2) 
+!    print*,"conservation :", sum(v(fld(:,1))+0.5_dl*fld(:,2)**2)
+
   end subroutine output_fields
 
   !>@brief

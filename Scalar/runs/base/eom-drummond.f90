@@ -28,7 +28,7 @@ module eom
   real(dl), dimension(:), allocatable, target :: yvec
 
   real(dl) :: len, dx, dk
-  real(dl) :: lambda, m2eff, phi0
+  real(dl) :: lambda, m2eff
 
 #ifdef FOURIER
   type(transformPair1D) :: tPair
@@ -47,46 +47,26 @@ contains
   end subroutine set_lattice_params
 
   ! Add appropriate subroutine calls here to potential derivs, etc. here
-  subroutine set_model_params(lam_,phi0_)
-    real(dl), intent(in) :: lam_,phi0_
-    lambda = lam_; m2eff = 2._dl*(1._dl-lambda); phi0=phi0_
+  subroutine set_model_params(m2,lam)
+    real(dl), intent(in) :: m2, lam
+    lambda = lam; m2eff = m2*(-1._dl+lambda**2)
   end subroutine set_model_params
 
-  real(dl) elemental function v(phi)
-    real(dl), intent(in) :: phi
-    v = 0.25_dl*(phi**2-1._dl)**2 + lambda*(phi**3/3._dl-phi) 
-  end function v
-
-  real(dl) elemental function vp(phi)
-    real(dl), intent(in) :: phi
-    vp = (phi**2-1._dl)*(phi + lambda)
-  end function vp
-
-  real(dl) elemental function vpp(phi)
-    real(dl), intent(in) :: phi
-    vpp = 3._dl*phi**2-1._dl + 2.*lambda*phi
-  end function vpp
-
   real(dl) function phi_fv()
-    phi_fv = -1._dl
+    phi_fv = 0.5_dl*twopi
   end function phi_fv
 
-  real(dl) function m2_fv()
-    m2_fv = vpp(phi_fv())
-  end function m2_fv
-
   !>@brief
-  !> Equations for double well
+  !> Compute the derivatives of the scalar field in the effective time-independent potential
   subroutine derivs(yc,yp)
     real(dl), dimension(:), intent(in) :: yc
     real(dl), dimension(:), intent(out) :: yp
 #ifdef DISCRETE
-    real(dl) :: lNorm 
-    lNorm = 1._dl/dx**2
+    real(dl), parameter :: lNorm = 1._dl/dx**2
 #endif
     yp(TIND) = 1._dl  ! Uncomment to track time as a variable
     yp(FLD) = yc(DFLD)
-    yp(DFLD) = -(yc(FLD)**2-1._dl)*(yc(FLD)+lambda)  ! Potential derivative, this is the only thing that needs to be changed for canonical scalar fields
+    yp(DFLD) = -( sin(yc(FLD)) + 0.5_dl*lambda**2*sin(2._dl*yc(FLD)) )
     
 #ifdef DIFF
 #ifdef DISCRETE
@@ -102,5 +82,5 @@ contains
 #endif
 #endif
   end subroutine derivs
-    
+  
 end module eom

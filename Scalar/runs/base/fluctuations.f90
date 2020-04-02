@@ -127,11 +127,11 @@ contains
     enddo
     spec = 0._dl
     spec(2:) = norm / w2eff(2:)**0.25
-    call generate_1dGRF(df,spec(1:kc),.false.)
+    call generate_1dGRF(df,spec(1:km),.false.,initStride=kc)
     fld(:,1) = fld(:,1) + df(:)
 
     spec = spec * w2eff**0.5
-    call generate_1dGRF(df,spec(1:kc),.false.)
+    call generate_1dGRF(df,spec(1:km),.false.,initStride=kc)
     fld(:,2) = fld(:,2) + df(:)
   end subroutine initialize_vacuum_fluctuations
   
