@@ -103,4 +103,29 @@ contains
 #endif
   end subroutine derivs
     
+  subroutine derivs_double_well_linear(yc,yp)
+    real(dl), dimension(:), intent(in) :: yc
+    real(dl), dimension(:), intent(out) :: yp
+#ifdef DISCRETE
+    real(dl) :: lNorm 
+    lNorm = 1._dl/dx**2
+#endif
+    yp(TIND) = 1._dl  ! Track time as a variable
+    yp(FLD) = yc(DFLD)
+    yp(DFLD) = -(yc(FLD)**2-1._dl)*yc(FLD) - lambda
+    
+#ifdef DIFF
+#ifdef DISCRETE
+    yp(nlat+1) = yp(nlat+1) + lNorm * ( yc(nlat) - 2._dl*yc(1) + yc(2) )
+    yp(2*nlat) = yp(2*nlat) + lNorm * ( yc(nlat-1) - 2._dl*yc(nlat) + yc(1) )
+    
+    yp(nlat+2:2*nlat-1) = yp(nlat+2:2*nlat-1) + lNorm*( yc(1:nlat-2) - 2._dl*yc(2:nlat-1) + yc(3:nlat) )
+#else
+    tPair%realSpace(:) = yc(FLD)
+    call laplacian_1d_wtype(tPair,dk)
+    yp(DFLD) = yp(DFLD) + tPair%realSpace(:)
+#endif
+#endif
+  end subroutine derivs_double_well_linear
+
 end module eom

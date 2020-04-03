@@ -1,4 +1,3 @@
 #define FOURIER T
-!#define DISCRETE 1
+!#define DISCRETE T
 #define DIFF T
-#define FOURIER_DIFF T

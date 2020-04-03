@@ -1,6 +1,6 @@
 #include "macros.h"
 
-program Gross_Pitaevskii_1d
+program Scalar_1D
   use, intrinsic :: iso_c_binding
   use constants, only : dl, twopi
   use utils, only : newunit
@@ -26,6 +26,11 @@ program Gross_Pitaevskii_1d
      integer :: nLat
   end type SimParams
   type(SimParams) :: sim
+
+  type ScalarLattice
+     real(dl), dimension(:,:), allocatable :: flds
+  end type ScalarLattice
+  type(ScalarLattice) :: simulation
 
 ! What needs fixing, set phi0 out here, allow m^2 to vary from vacuum value, etc.
 
@@ -317,4 +322,4 @@ contains
     close(fNum)
   end subroutine initialise_from_file
   
-end program Gross_Pitaevskii_1d
+end program Scalar_1D
