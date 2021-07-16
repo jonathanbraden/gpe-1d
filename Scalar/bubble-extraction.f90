@@ -2,7 +2,7 @@ module bubble_extraction
   use constants, only : dl, twopi
   use fftw3
   implicit none
-  
+
 contains
   
   ! To do, adjust the lower bound here to depend on barrier location
@@ -10,14 +10,14 @@ contains
   ! Should tune thresholds to make use of some prescribed bubble radius, and field amplitude from instanton.
   !
   ! Known Bugs: Have to deal with periodic boundary, or else a bubble hitting boundary is counted twice 
- function count_bubbles(fld) result(nBub)
+ function count_bubbles(fld,nt) result(nBub)
     real(dl), dimension(:), intent(in) :: fld
+    integer, intent(in) :: nt
     integer, dimension(1:nt) :: nBub
-    integer :: bSize  ! make this in an input parameter
-
+    integer :: bSize  ! make this an input parameter
+    
     real(dl), dimension(1:size(fld)) :: cphi
-    integer :: n, bSize
-    integer, parameter :: nt = 4
+    integer :: n
     integer, dimension(1:nt) :: nv, nbound
     real(dl), dimension(1:nt) :: thresh
     logical, dimension(1:nt) :: boundary

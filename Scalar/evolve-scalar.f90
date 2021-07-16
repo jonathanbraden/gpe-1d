@@ -438,7 +438,7 @@ contains
           call gl10(yvec,dt)
        enddo
        call output_fields(fld)
-       write(60,*) count_bubbles(fld(:,1)), mean_cos(fld(:,1))
+       write(60,*) count_bubbles(fld(:,1),4), mean_cos(fld(:,1))
     enddo
     write(60,*)
   end subroutine time_evolve
