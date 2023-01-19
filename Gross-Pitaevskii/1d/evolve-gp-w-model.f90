@@ -4,12 +4,22 @@ program Gross_Pitaevskii_1d
   use utils, only : newunit
   use gaussianRandomField
   use eom
+  use fluctuations
   use output
   use integrator
+
   implicit none
+
+  type TimeStepper
+     real(dl) :: tcur
+     real(dl) :: dt, dt_out
+     integer :: out_size, n_out_steps, n_steps
+  end type TimeStepper
+  
+  
   real(dl), dimension(:,:,:), pointer :: fld
   real(dl), pointer :: tcur
-  real(dl) :: dtout_, dt_
+  real(dl) :: dtout_, dt_  ! Remove this ugliness
 
   integer :: n
   integer :: ds, w_samp
@@ -24,6 +34,9 @@ program Gross_Pitaevskii_1d
   integer :: i, nSamp
 
   real(dl) :: om_alex, rho_alex, nu_alex, del_alex, phi_init, len_alex
+
+  type(SpecParams) :: fluc_params
+  type(TimeStepper) :: time_stepper
   
   n=512
   ds = 1; w_samp=16
@@ -57,24 +70,35 @@ program Gross_Pitaevskii_1d
   fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
   tcur => yvec(2*nLat*nFld+1)
 
+  fluc_params%rho = rho_alex
+  fluc_params%len = len_alex
+  fluc_params%type = 'KG'
+  fluc_params%modes = (/.true.,.true./)
+  fluc_params%nCut = n/2
+  fluc_params%nu = nu_alex
+  fluc_params%m2eff = 4._dl*nu_alex*(del_alex**2-1._dl)
   
-  !call sample_ics(1000, n, 2, n/2, rho_alex)
+  call sample_ics(1000,fluc_params, n, 2)
   
   ! Initialise the fluctuations
   fld = 0._dl
+  call initialise_fluctuations(fld, fluc_params)
   !call initialise_fluctuations_white(fld, rho_alex, nCut=n/2)
   !call initialise_fluctuations_bogoliubov(fld, rho_alex, nCut=n/2)
-  call initialise_fluctuations_kg(fld, rho, nCut=n/2, modes=(/.true.,.false./))
-
+  !call initialise_fluctuations_kg_long(fld, rho, 4*nu*(del_alex**2-1._dl), n/2, (/.true.,.false./))
+  !call initialise_fluctuations_white(fld, fluc_params)
   ! Add displaced mean field
   fld(:,1,1) = fld(:,1,1) + 1.
   fld(:,1,2) = fld(:,1,2) - 1.
   !fld(:,1,1) = cos(0.5*phi_init) + fld(:,1,1); fld(:,2,1) = -sin(0.5*phi_init) + fld(:,2,1)
   !fld(:,1,2) = -cos(0.5*phi_init) + fld(:,1,2); fld(:,2,2) = -sin(0.5*phi_init) + fld(:,2,2)
 
-  !print*,"lam is ",lam," del = ",del," nu = ",nu, "mu = ",mu
-  
-  call time_evolve( (twopi/om_alex)/dble(w_samp), 2.*45.465, (twopi/om_alex)/dble(2.) )
+  ! Fix this up, then change the time-stepper call
+  time_stepper%dt = (twopi/om_alex)/dble(w_samp)
+  time_stepper%out_size = 8  ! Fix this
+  time_stepper%tcur = 0._dl
+  time_stepper%n_out_steps = 2.*45.456 / ((twopi/om_alex)/dble(2.))
+  !call time_evolve( (twopi/om_alex)/dble(w_samp), 2.*45.465, (twopi/om_alex)/dble(2.) )
   !call time_evolve( (twopi/om_alex)/dble(w_samp), 
 
   !call time_evolve( (twopi/om_alex)/dble(w_samp), 45.465, (twopi/om_alex)/dble(w_samp)*8 )
@@ -116,7 +140,7 @@ program Gross_Pitaevskii_1d
 
   do i=1,nSamp
      call initialise_mean_preheating(fld, phi0)
-     call initialise_fluctuations_white(fld, 1.e8)
+     call initialise_fluctuations_white_long(fld, 1.e8, n/2) ! Check this
   
      call time_evolve(twopi/128./(2.*nu**0.5)/4., twopi*50./(2.*nu**0.5), twopi/16./(2.*nu**0.5))
   enddo
@@ -124,43 +148,52 @@ program Gross_Pitaevskii_1d
   
 contains
 
-  subroutine sample_ics(nSamp, nLat, nFld, nCut, rho)
+  ! Add input specifying the mean field
+  subroutine sample_ics(nSamp, spec_params, nLat, nFld)
     integer, intent(in) :: nSamp
-    integer, intent(in) :: nLat, nFld, nCut
-    real(dl), intent(in) :: rho
+    type(SpecParams), intent(in) :: spec_params
+    integer, intent(in) :: nLat, nFld
     
     integer :: o, i, j
     real(dl), dimension(1:nLat,1:2,1:nFld) :: fld_loc
 
-    ! Add input specifying the mean field
-    o=70
-    open(unit=o,file='initial_conditions.bin', access='stream')
+    open(unit=newunit(o),file='initial_conditions.bin', access='stream')
     
     do i=1,nSamp
        fld_loc = 0._dl
-       !call initialise_fluctuations_white(fld_loc, rho, nCut=nCut)
-       !call initialise_fluctuations_bogoliubov(fld_loc, rho, nCut=nCut)
-       call initialise_fluctuations_kg( fld_loc, rho, nCut=nCut, modes=(/.true.,.false./) )
-       fld_loc(:,1,1) = fld_loc(:,1,1) + 1.
-       fld_loc(:,1,2) = fld_loc(:,1,2) - 1.
+       call initialise_fluctuations(fld_loc, spec_params)
+       
+       !select case (spec_params%type)
+       !case ('WHITE')
+       !   call initialise_fluctuations_white(fld_loc, spec_params)
+       !case ('KG')
+       !   call initialise_fluctuations_kg(fld_loc, spec_params)
+       !case ('BOGO')
+       !   call initialise_fluctuations_bogo(fld_loc, spec_params)
+       !case default
+       !   call initialise_fluctuations_white(fld_loc, spec_params)
+       !end select
+       fld_loc(:,1,1) = fld_loc(:,1,1) + 1.  ! Change the mean to a parameter
+       fld_loc(:,1,2) = fld_loc(:,1,2) - 1.  ! Change the mean to a passable parameter
+       
        write(o) fld_loc
     enddo
     close(o)
   end subroutine sample_ics
 
-  subroutine time_evolve_ensemble(nSamp, nLat, nFld, nCut, rho)
+  subroutine time_evolve_ensemble(nSamp, nLat, nFld, spec_params)
     integer, intent(in) :: nSamp
-    integer, intent(in) :: nLat, nFld, nCut
-    real(dl), intent(in) :: rho
+    integer, intent(in) :: nLat, nFld
+    type(SpecParams) :: spec_params
 
     integer :: i
 
-    
+    ! Lots of nonlocality to kill in here
     do i=1,nSamp
        fld = 0._dl
-       !call initialise_fluctuations(fld, rho, nCut=nCut)
-       !call initialise_fluctuations_bogoliubov(fld, rho, nCut=nCut)
-       call initialise_fluctuations_kg(fld, rho, nCut=nCut)
+       !call initialise_fluctuations_white_long(fld, rho, nCut=nCut)
+       !call initialise_fluctuations_bogoliubov_long(fld, rho, nCut=nCut)
+       call initialise_fluctuations_kg(fld, spec_params)
        fld(:,1,1) = 1._dl + fld(:,1,1)
        fld(:,1,2) = -1._dl + fld(:,1,1)
 
@@ -178,7 +211,8 @@ contains
     call initialise_lattice(nf,nl,dx)
     call init_integrator(nVar)
   end subroutine setup_w_model
-    
+
+  ! Convert this to take a TimeStepper.  Or better, a Model object
   subroutine time_evolve(dt,tend,dtout)
     real(dl), intent(in) :: dt
     real(dl), intent(in) :: tend, dtout
@@ -310,7 +344,8 @@ contains
     real(dl), parameter :: sig = -1._dl
     d2v = 2._dl*(cos(2._dl*theta)**2 - sin(2._dl*theta)**2) - 2.*sig*nu_bg*sin(2.*theta) + dg_bg*cos(2.*theta)
   end function d2vTheta
-  
+
+#ifdef FLUC
   subroutine initialise_fluctuations_white(fld, rho, nCut_)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     real(dl), intent(in) :: rho
@@ -334,7 +369,7 @@ contains
        fld(:,j,i) = fld(:,j,i) + df
     enddo; enddo
   end subroutine initialise_fluctuations_white
-
+  
   subroutine initialise_fluctuations_kg(fld, rho, nCut, modes)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     real(dl), intent(in) :: rho
@@ -382,7 +417,7 @@ contains
        fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
     enddo
   end subroutine initialise_fluctuations_kg
-    
+  
   subroutine initialise_fluctuations_bogoliubov(fld, rho, nCut)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     real(dl), intent(in) :: rho
@@ -424,9 +459,9 @@ contains
     do j=1,2
        fld(:,j,1) = fld(:,j,1) + sqrt(0.5_dl)*( df_tot(:,j) + df_rel(:,j) )
        fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
-    enddo
-    
+    enddo   
   end subroutine initialise_fluctuations_bogoliubov
+#endif
   
   ! Subroutine to initialize fluctuations around constrained IR field
   ! This is copy/paste from above, actually need to rewrite it
@@ -494,7 +529,8 @@ contains
        fld(i,1,2) = rho_ave*cos(theta); fld(i,2,2) = rho*sin(theta)
     enddo
   end subroutine initialise_fields_sine
-  
+
+! This should be removed
   subroutine initialise_fields_rand(fld)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     real(dl), parameter :: rho_bg = 1._dl
@@ -504,7 +540,7 @@ contains
     rho_fluc = rho ! Fix this horrible nonlocality
     call initialise_mean_fields(fld,rho_bg)
     yvec(4*nLat+1) = 0._dl ! Add a tcur pointer here
-    call initialise_fluctuations_white(fld, rho_fluc)  ! Fix this horrible nonlocality
+    call initialise_fluctuations_white_long(fld, rho_fluc, n/2)  ! Fix this horrible nonlocality
   end subroutine initialise_fields_rand
 
 ! Refactored into a separate file

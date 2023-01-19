@@ -9,8 +9,6 @@ BLAS = T
 
 # Default FFTW Lib location
 FFTW_DIR = /usr/local/
-#FFTW_DIR = /usr/local/fftw/fftw-3.3.4-gcc-5.1.0/
-#FFTW_DIR = $(HOME)/local/fftw-3.3.4/gcc-4.4.7/
 FFTW_INC = -I$(FFTW_DIR)include/
 FFTW_LIB = -L$(FFTW_DIR)lib/
 
@@ -75,7 +73,7 @@ ifeq ($(BENCH_FINE),T)
 endif
 
 OBJS = constants.o fftw_mod_wtype.o random_field.o eom-new.o integrator.o
-OBJS_OO = constants.o utils.o fftw_mod_wtype.o random_field.o gpe-model.o eom-w-model.o output.o integrator.o
+OBJS_OO = constants.o utils.o fftw_mod_wtype.o random_field.o gpe-model.o eom-w-model.o fluctuations.o output.o integrator.o
 
 #gp: %: $(OBJS) evolve-gp.o
 #	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -o gp-1d evolve-gp.o $(OBJS) $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)
@@ -92,3 +90,7 @@ clean:
 	rm -f *.o
 	rm -f *.mod
 	rm -f gp-1d
+
+cleandat:
+	rm -f fields.bin
+	rm -f log.out
