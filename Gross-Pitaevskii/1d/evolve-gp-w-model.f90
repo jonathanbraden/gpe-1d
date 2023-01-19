@@ -4,6 +4,7 @@ program Gross_Pitaevskii_1d
   use utils, only : newunit
   use gaussianRandomField
   use eom
+  use homogeneousField
   use fluctuations
   use output
   use integrator
@@ -237,19 +238,6 @@ contains
        call output_fields_binary(fld)
     enddo
   end subroutine time_evolve
-
-  ! Moved to a module
-  real(dl) function dispersion_total(k) result(om)
-    real(dl), intent(in) :: k
-
-    om = k*sqrt(1. + k**2/4._dl)
-  end function dispersion_total
-
-  ! Moved to a module
-  real(dl) function dispersion_rel(k,nu) result(om)
-    real(dl), intent(in) :: k, nu
-    om = 2._dl*sqrt( (nu+0.25*k**2) * (1._dl+nu+0.25*k**2) )
-  end function dispersion_rel
   
   !>@brief
   !> Compute the desired time step dt adaptively using precomputed conditions.
@@ -311,160 +299,10 @@ contains
     print*,"Homogeneous ICs are ",fld(1,1,1),fld(1,1,2)
   end subroutine initialise_mean_fields
 
-  real(dl) function find_max_angle(nu,dg,gc) result(theta)
-    real(dl), intent(in) :: nu, dg, gc
-    real(dl) :: nu_bg, dg_bg, dth; integer :: l
-    integer, parameter :: maxit = 16; real(dl), parameter :: eps = 1.e-16
-    print*,"in the function"
-    theta = 0.125_dl*twopi + 0.25_dl*dg/(1._dl-gc - nu)
-    nu_bg = nu / (1._dl-gc); dg_bg = dg / (1._dl-gc)
-    print*,"entering loop"
-    do l = 1,maxit
-       dth = - dvTheta(theta,nu_bg,dg_bg) / d2vTheta(theta,nu_bg,dg_bg)
-       theta = theta + dth
-       if (abs(dth) < eps) exit
-    end do
-    print*,"Converged in ",l," iterations to ",theta
-    if (l==maxit) print*,"Newton method failed to find a background"
-  end function find_max_angle
-
-  real(dl) function theta_guess(nu,dg,gc) result(theta)
-    real(dl), intent(in) :: nu,dg,gc
-    theta = 0.125_dl*twopi + 0.25_dl*dg/(1._dl-gc-nu)
-  end function theta_guess
-    
-  real(dl) function dvTheta(theta, nu_bg, dg_bg) result(dv)
-    real(dl), intent(in) :: theta, nu_bg, dg_bg
-    real(dl), parameter :: sig = -1._dl
-    dv = cos(2._dl*theta)*sin(2._dl*theta) + sig*nu_bg*cos(2.*theta) + 0.5*dg_bg*sin(2.*theta)
-  end function dvTheta
-
-  real(dl) function d2vTheta(theta, nu_bg, dg_bg) result(d2v)
-    real(dl), intent(in) :: theta, nu_bg, dg_bg
-    real(dl), parameter :: sig = -1._dl
-    d2v = 2._dl*(cos(2._dl*theta)**2 - sin(2._dl*theta)**2) - 2.*sig*nu_bg*sin(2.*theta) + dg_bg*cos(2.*theta)
-  end function d2vTheta
-
-#ifdef FLUC
-  subroutine initialise_fluctuations_white(fld, rho, nCut_)
-    real(dl), dimension(:,:,:), intent(inout) :: fld
-    real(dl), intent(in) :: rho
-    integer, intent(in), optional :: nCut_
-
-    real(dl) :: df(1:size(fld,dim=1)), spec(1:size(fld,dim=1)/2+1)
-    integer :: i,j
-    integer :: n, num_fld
-    integer :: nCut
-
-    n = size(fld,dim=1)
-    num_fld = size(fld,dim=3)
-    nCut = n/2 ;  if (present(nCut_)) nCut = nCut_
-    
-    spec = 0._dl
-    do i=2,n/2
-       spec(i) = 1._dl / (sqrt(2._dl*len*rho))  ! This is the only place I need rho
-    enddo
-    do i = 1,num_fld; do j=1,2
-       call generate_1dGRF(df,spec(1:nCut),.false.)
-       fld(:,j,i) = fld(:,j,i) + df
-    enddo; enddo
-  end subroutine initialise_fluctuations_white
-  
-  subroutine initialise_fluctuations_kg(fld, rho, nCut, modes)
-    real(dl), dimension(:,:,:), intent(inout) :: fld
-    real(dl), intent(in) :: rho
-    integer, intent(in) :: nCut
-    logical, intent(in), dimension(2), optional :: modes
-
-    real(dl), dimension(1:size(fld,dim=1),1:2) :: df_rel, df_tot
-    real(dl) :: spec(1:size(fld,dim=1)/2+1)
-    real(dl) :: norm, dk, keff
-    real(dl) :: m2eff, lameff
-    integer :: i,j
-    logical, dimension(2) :: modes_
-    
-    modes_ = (/ .true., .true. /);  if (present(modes)) modes_ = modes
-    
-    lameff = del*sqrt(2._dl/nu)
-    m2eff = 4.*nu*(lameff**2-1._dl)
-    norm = 1._dl / sqrt(2._dl*len*rho)
-    dk = twopi/len
-
-    df_rel = 0._dl
-    spec = 0._dl
-    do i=2,nLat/2
-       keff = (i-1)*dk
-       spec(i) = 1._dl/sqrt(keff)
-    enddo
-    spec = spec * norm
-    do i = 1,nFld; do j=1,2
-       if (modes(2)) call generate_1dGRF(df_rel(:,j), spec(1:nCut), .false.)
-    enddo; enddo
-
-    df_tot = 0.
-    spec = 0._dl
-    do i=1,nLat/2
-       keff = (i-1)*dk
-       spec(i) = 1._dl / (keff**2+m2eff)**0.25 
-    enddo
-    spec = spec * norm
-    do i=1,nFld; do j=1,2
-       if (modes(1)) call generate_1dGRF(df_tot(:,j), spec(1:nCut), .false.)
-    enddo; enddo
-
-    do j=1,2
-       fld(:,j,1) = fld(:,j,1) + sqrt(0.5_dl)*( df_tot(:,j) + df_rel(:,j) )
-       fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
-    enddo
-  end subroutine initialise_fluctuations_kg
-  
-  subroutine initialise_fluctuations_bogoliubov(fld, rho, nCut)
-    real(dl), dimension(:,:,:), intent(inout) :: fld
-    real(dl), intent(in) :: rho
-    integer, intent(in), optional :: nCut
-
-    real(dl) :: df_rel(1:nLat,1:2), df_tot(1:nLat,1:2), spec(1:nLat/2+1)
-    integer :: i,j
-    real(dl) :: norm, dk, keff
-    real(dl) :: lameff, nu_
-
-    nu_ = nu  ! Fix this nonlocality
-    lameff = del*sqrt(2._dl/nu_)
-    norm = 1._dl / sqrt(2._dl*len*rho)
-    dk = twopi / len   ! Fix this nonlocality
-    
-    ! Relative modes
-    spec = 0._dl
-    do i=2,nLat/2
-       keff = (i-1)*dk
-       spec(i) = sqrt( (keff**2+2._dl)/(keff*sqrt(keff**2+4._dl)) )
-    enddo
-    spec = spec * norm
-    do j=1,2
-       call generate_1dGRF(df_rel(:,j), spec(1:nCut), .false.)
-    enddo
-    
-    ! Now get total modes
-    spec = 0._dl
-    do i=2,nLat/2
-       keff = (i-1)*dk
-       spec(i) = sqrt( (keff**2 + 2._dl - 4._dl*nu_)  / sqrt(keff**2+4._dl*nu_*(lameff**2-1._dl)) / sqrt(keff**2+4._dl-4._dl*nu_*(lameff**2+1._dl)) )
-    enddo
-    spec = spec * norm
-    do j=1,2
-       call generate_1dGRF(df_tot(:,j), spec(1:nCut), .false.)
-    enddo
-    
-    ! Now remix the fields and add them to the background
-    do j=1,2
-       fld(:,j,1) = fld(:,j,1) + sqrt(0.5_dl)*( df_tot(:,j) + df_rel(:,j) )
-       fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
-    enddo   
-  end subroutine initialise_fluctuations_bogoliubov
-#endif
   
   ! Subroutine to initialize fluctuations around constrained IR field
   ! This is copy/paste from above, actually need to rewrite it
+  ! Move this into the fluctuations module
 #ifdef CONSTRAINED
   subroutine initialise_constrained_fluctuations_IR(fld)
     real(dl) :: df(1:nLat), spec(1:nLat/2+1)
@@ -578,23 +416,6 @@ contains
     endif
     write(oFile,*) t, 2.*sqrt(nu)*t
   end subroutine output_log_file
-  
-  subroutine output_fields_binary(fld,fName)
-    real(dl), dimension(:,:,:), intent(in) :: fld
-    character(80), intent(in), optional :: fName
-
-    logical :: o
-    character(80) :: fn
-    integer, save :: oFile
-    
-    fn = 'fields.bin'
-    if (present(fName)) fn = trim(fName)
-
-    inquire(file=trim(fn), opened=o)
-    if (.not.o) open(unit=newunit(oFile), file=fn, access='stream')
-
-    write(oFile) fld
-  end subroutine output_fields_binary
 #endif
   
 end program Gross_Pitaevskii_1d
