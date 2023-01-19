@@ -4,6 +4,7 @@ program Gross_Pitaevskii_1d
   use utils, only : newunit
   use gaussianRandomField
   use eom
+  use TimeStepping
   use homogeneousField
   use fluctuations
   use output
@@ -11,12 +12,11 @@ program Gross_Pitaevskii_1d
 
   implicit none
 
-  type TimeStepper
-     real(dl) :: tcur
-     real(dl) :: dt, dt_out
-     integer :: out_size, n_out_steps, n_steps
-  end type TimeStepper
-  
+  type Model
+     !type(ModelParams) :: model_params
+     type(SpecParams) :: spec_params
+     type(TimeStepper) :: time_params
+  end type Model
   
   real(dl), dimension(:,:,:), pointer :: fld
   real(dl), pointer :: tcur
@@ -34,6 +34,7 @@ program Gross_Pitaevskii_1d
 
   integer :: i, nSamp
 
+  ! Move params somewhere else
   real(dl) :: om_alex, rho_alex, nu_alex, del_alex, phi_init, len_alex
 
   type(SpecParams) :: fluc_params
@@ -47,7 +48,7 @@ program Gross_Pitaevskii_1d
   !call setup_w_model( 2, n, len_s/(2.*(nu)**0.5)/dble(n) )
   !fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
   !tcur => yvec(2*nLat*nFld+1)
-  !call initialise_fields_rand(fld)
+  !call initialise_false_vacuum(fld)
   !call time_evolve((1._dl/dble(w_samp))*twopi/omega,100._dl,dble(ds)/dble(w_samp)*twopi/omega)
 
   
@@ -115,7 +116,7 @@ program Gross_Pitaevskii_1d
   tcur => yvec(2*nLat*nFld+1)
   
   phi0 = 0.2*twopi  ! 0.035*twopi has no resonance band with mL = 50
-  kfloq = phi0/2./2.**0.5 ! in units of m
+  kfloq = floquet_wavenumber(phi0)  ! phi0/2./2.**0.5 ! in units of m
   wn = floor(len_s*kfloq/twopi)
   print*,"w_n = ",wn
   
@@ -134,14 +135,14 @@ program Gross_Pitaevskii_1d
   tcur => yvec(2*nLat*nFld+1)
 
   phi0 = 0.2*twopi
-  kfloq = phi0/2./2.**0.5
+  kfloq = floquet_wavenumber(phi0)  ! phi0/2./2.**0.5
   print*,"floq index = ",kfloq*len_s/twopi
 
   nSamp = 1
 
   do i=1,nSamp
      call initialise_mean_preheating(fld, phi0)
-     call initialise_fluctuations_white_long(fld, 1.e8, n/2) ! Check this
+     call initialise_fluctuations_white_long(fld, 1.e8, n/2) ! Check this (and convert to new version)
   
      call time_evolve(twopi/128./(2.*nu**0.5)/4., twopi*50./(2.*nu**0.5), twopi/16./(2.*nu**0.5))
   enddo
@@ -149,6 +150,46 @@ program Gross_Pitaevskii_1d
   
 contains
 
+  !>@brief Returns up limit of Floquet band in units of m, for sine-Gordon model
+  real(dl) function floquet_wavenumber(phi0) result(kfloq)
+    real(dl), intent(in) :: phi0
+
+    kfloq = 0.5_dl*sqrt(0.5_dl)*phi0
+  end function floquet_wavenumber
+  
+  subroutine initialise_false_vacuum(fld, spec_params, rho_bg)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    type(SpecParams), intent(in) :: spec_params
+    real(dl), intent(in) :: rho_bg
+
+    fld = 0._dl
+    call find_homogeneous_fv(fld, rho_bg)  ! Change the name of this
+    yvec(4*nLat+1) = 0._dl
+    call initialise_fluctuations(fld, spec_params)
+  end subroutine initialise_false_vacuum
+
+  ! Add model parameters in here
+  !>@brief
+  !> Find the false vacuum minima around which we will evolve our field fluctuations initially
+  subroutine find_homogeneous_fv(fld,rho_bg)
+    real(dl), dimension(:,:,:), intent(out) :: fld
+    real(dl), intent(in) :: rho_bg
+    real(dl) :: theta, sig
+
+    sig = -1._dl
+    ! This is just for the symmetric case
+    fld(:,1,1) =  sqrt(rho_bg); fld(:,2,1) = 0._dl
+    fld(:,1,2) = sig*sqrt(rho_bg); fld(:,2,2) = 0._dl
+
+    ! Here is the result for nonsymmetric case
+    ! Leading approximation
+    theta = 0.125_dl*twopi + 0.25_dl*dg/(1._dl-gc - nu)
+    theta = find_max_angle(nu,dg,gc)
+    fld(:,1,1) =  (2._dl*rho)**0.5*cos(theta); fld(:,2,1) = 0._dl
+    fld(:,1,2) = -(2._dl*rho)**0.5*sin(theta); fld(:,2,2) = 0._dl
+  end subroutine find_homogeneous_fv
+
+  
   ! Add input specifying the mean field
   subroutine sample_ics(nSamp, spec_params, nLat, nFld)
     integer, intent(in) :: nSamp
@@ -163,17 +204,6 @@ contains
     do i=1,nSamp
        fld_loc = 0._dl
        call initialise_fluctuations(fld_loc, spec_params)
-       
-       !select case (spec_params%type)
-       !case ('WHITE')
-       !   call initialise_fluctuations_white(fld_loc, spec_params)
-       !case ('KG')
-       !   call initialise_fluctuations_kg(fld_loc, spec_params)
-       !case ('BOGO')
-       !   call initialise_fluctuations_bogo(fld_loc, spec_params)
-       !case default
-       !   call initialise_fluctuations_white(fld_loc, spec_params)
-       !end select
        fld_loc(:,1,1) = fld_loc(:,1,1) + 1.  ! Change the mean to a parameter
        fld_loc(:,1,2) = fld_loc(:,1,2) - 1.  ! Change the mean to a passable parameter
        
@@ -200,7 +230,6 @@ contains
 
        !call time_evolve()
     enddo
-    
   end subroutine time_evolve_ensemble
   
   !>@brief
@@ -278,28 +307,6 @@ contains
     fld(:,1,2) = rho_*cos(phi0); fld(:,2,2) = rho_*sin(phi0)
   end subroutine initialise_mean_preheating
   
-  !>@brief
-  !> Find the false vacuum minima around which we will evolve our field fluctuations initially
-  subroutine initialise_mean_fields(fld,rho)
-    real(dl), dimension(:,:,:), intent(out) :: fld
-    real(dl), intent(in) :: rho
-    real(dl) :: theta, sig
-
-    sig = -1._dl
-    ! This is just for the symmetric case
-    fld(:,1,1) =  rho**0.5; fld(:,2,1) = 0._dl
-    fld(:,1,2) = -rho**0.5; fld(:,2,2) = 0._dl
-
-    ! Here is the result for nonsymmetric case
-    ! Leading approximation
-    theta = 0.125_dl*twopi + 0.25_dl*dg/(1._dl-gc - nu)
-    theta = find_max_angle(nu,dg,gc)
-    fld(:,1,1) =  (2._dl*rho)**0.5*cos(theta); fld(:,2,1) = 0._dl
-    fld(:,1,2) = -(2._dl*rho)**0.5*sin(theta); fld(:,2,2) = 0._dl
-    print*,"Homogeneous ICs are ",fld(1,1,1),fld(1,1,2)
-  end subroutine initialise_mean_fields
-
-  
   ! Subroutine to initialize fluctuations around constrained IR field
   ! This is copy/paste from above, actually need to rewrite it
   ! Move this into the fluctuations module
@@ -367,19 +374,6 @@ contains
        fld(i,1,2) = rho_ave*cos(theta); fld(i,2,2) = rho*sin(theta)
     enddo
   end subroutine initialise_fields_sine
-
-! This should be removed
-  subroutine initialise_fields_rand(fld)
-    real(dl), dimension(:,:,:), intent(inout) :: fld
-    real(dl), parameter :: rho_bg = 1._dl
-    integer :: i; real(dl) :: dth, theta
-    real(dl) :: rho_fluc
-
-    rho_fluc = rho ! Fix this horrible nonlocality
-    call initialise_mean_fields(fld,rho_bg)
-    yvec(4*nLat+1) = 0._dl ! Add a tcur pointer here
-    call initialise_fluctuations_white_long(fld, rho_fluc, n/2)  ! Fix this horrible nonlocality
-  end subroutine initialise_fields_rand
 
 ! Refactored into a separate file
 #ifdef OUTPUT
