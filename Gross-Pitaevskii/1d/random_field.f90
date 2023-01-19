@@ -169,6 +169,8 @@ contains
        Fk(nnk+1:nn) = 0._dl
        call fftw_execute_dft_c2r(fft_plan, Fk, field)
     endif
+
+    deallocate( amp, phase, deviate )
   end subroutine generate_1dGRF
 
 
@@ -202,7 +204,7 @@ contains
 
     call random_number(amp(1:n))
     call random_number(phase(1:n))
-    deviate = -sqrt(log(amp))*exp(iImag*twopi*phase)
+    deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
 
     fields = deviate
 ! Hmm, I don't think this works the way I want it to...
@@ -314,20 +316,4 @@ contains
     deallocate(seeds)
   end subroutine initialize_rand
 
-  !>@brief Given two uniformly distributed random deviates
-  !>       generate a complex Gaussian distributed random deviate
-  !>
-  !> From two random deviates \f$A,\alpha\f$ distributed on (0,1],
-  !> we can generate a complex Gaussian Random Deviate $r$ through
-  !> \f[ r = -\sqrt{\ln A} e^{2\pi i \alpha}
-  !> which has RMS variance $\langle |r|^2 \rangle = ?
-  !>
-  !>@param[in] amp
-  !>@param[in] phase
-  elemental function boxMueller(amp,phase)  result(r)
-    real(dl), intent(in) :: amp, phase
-    real(dl) :: r
-    r = -sqrt(log(amp))*exp(iImag*twopi*phase)
-  end function boxMueller
-    
 end module gaussianRandomField

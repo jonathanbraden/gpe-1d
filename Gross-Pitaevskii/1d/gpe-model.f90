@@ -46,10 +46,11 @@ contains
     nu = nu_
     gs=1._dl; gc = 0._dl; dg = 0._dl
     
-    del = del_*(nu/2._dl)**0.5
+    del = del_*(nu/2._dl)**0.5  
     omega = om_*2._dl*nu**0.5  ! conversion from scalar to healing length units
     rho = rho_*2._dl*nu**0.5   ! conversion from scalar to healing length units
 
+    ! Are my omega and rho conversions correct?
     call set_derived_params(nf)
   end subroutine initialise_model_symmetric
   

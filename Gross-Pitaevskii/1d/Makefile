@@ -75,7 +75,7 @@ ifeq ($(BENCH_FINE),T)
 endif
 
 OBJS = constants.o fftw_mod_wtype.o random_field.o eom-new.o integrator.o
-OBJS_OO = constants.o utils.o fftw_mod_wtype.o random_field.o gpe-model.o eom-w-model.o integrator.o
+OBJS_OO = constants.o utils.o fftw_mod_wtype.o random_field.o gpe-model.o eom-w-model.o output.o integrator.o
 
 #gp: %: $(OBJS) evolve-gp.o
 #	$(FC) $(FFLAGS) $(FOPT) $(FFTW_INC) $(MACROS) -o gp-1d evolve-gp.o $(OBJS) $(FFTW_LIB) $(FLIBS) $(THREAD_LIB)
