@@ -78,28 +78,6 @@ contains
     lam_s = del_c*(2._dl/nu_b)**0.5
   end subroutine convert_units_condensate_to_scalar
   
-  !>@brief
-  !> Solve the background condensate densities in the 2-field model
-  function background_densities(dg) result(n)
-    real(dl), intent(in) :: dg
-    real(dl), dimension(1:nFld) :: n
-    n = 1._dl  ! Fix this to actually solve
-  end function background_densities
-
-! Derivatives of potential with respect to theta for computing mean densities by Newton-Raphson
-  function dVdTheta(x) result(dv)
-    real(dl), intent(in) :: x
-    real(dl) :: dv
-
-    dv = cos(2._dl*x)*(sin(2._dl*x) + 4._dl*nu) + sin(2._dl*x)*dg
-  end function dVdTheta
-
-  function d2Vd2Theta(x) result(d2v)
-    real(dl), intent(in) :: x
-    real(dl) :: d2v
-    
-  end function d2Vd2Theta
-  
 #ifdef ADJUST
   !>@brief
   !> Set the parameters of the Bose-Condensates assuming the simplified situation of equal couplings
@@ -140,7 +118,8 @@ contains
     real(dl) :: nueff
     real(dl), dimension(1:nLat,1:nFld) :: ysq  ! probably faster to preallocate this
 #ifdef DISCRETE
-    real(dl), parameter :: lNorm = 0.5_dl/dx**2
+    real(dl) :: lNorm
+    lNorm = 0.5_dl/dx**2
 #endif
     
     ysq(:,1) = yc(R1)**2 + yc(I1)**2
@@ -201,6 +180,23 @@ contains
 #endif
   end subroutine derivs
 
+  subroutine derivs_no_oscillation(yc, yp)
+    real(dl), dimension(:), intent(in) :: yc
+    real(dl), dimension(:), intent(out) :: yp
+
+    real(dl), dimension(1:nLat,1:nFld) :: ysq
+    
+    ysq(:,1) = yc(R1)**2 + yc(I1)**2
+    ysq(:,2) = yc(R2)**2 + yc(I2)**2
+    yp(TIND) = 1._dl
+
+!    yp(R1) = -mu*yc(I1) + ()*yc(I1)
+!    yp(I1) = mu*yc(R1) - ()*yc(R1)
+!    yp(R2) = -mu*yc(I2) + ()*yc(I2)
+!    yp(I2) = mu*yc(R2) - ( )*yc(R2)
+
+  end subroutine derivs_no_oscillation
+  
   !>@brief
   !> Solve coupled GPE for the simplified case of a symmetric 2 BEC experiment
   !>
@@ -216,10 +212,7 @@ contains
 
     real(dl) :: nueff
     real(dl), dimension(1:nLat,1:nFld) :: ysq
-#ifdef DISCRETE
-    real(dl), parameter :: lNorm = 0.5_dl/dx**2
-#endif
-    
+ 
     ysq(:,1) = yc(R1)**2 + yc(I1)**2
     ysq(:,2) = yc(R2)**2 + yc(I2)**2
 
@@ -285,5 +278,10 @@ contains
 #endif
 !    rho = rho + 0.5_dl*lam(1,1)*(yc(R1)**1+yc(I1)**2)**2 + 0.5_dl*lam(2,2)*(yc(R2)**2+yc(I2)**2)**2 + lam(1,2)*(yc(R1)**2+yc(I1)**2)*(yc(R2)**2+yc(I2)**2) - 2._dl*nu*(yc(R1)*yc(R2)+yc(I1)*yc(I2))
   end subroutine compute_energy
+
+  real(dl) function compute_total_density(fld) result(rho)
+    real(dl), dimension(:,:,:), intent(in) :: fld
+    rho = sum(fld**2) / size(fld,dim=1)
+  end function compute_total_density
   
 end module eom
