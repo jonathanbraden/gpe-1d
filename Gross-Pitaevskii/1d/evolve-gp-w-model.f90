@@ -51,7 +51,6 @@ program Gross_Pitaevskii_1d
   !call initialise_false_vacuum(fld)
   !call time_evolve((1._dl/dble(w_samp))*twopi/omega,100._dl,dble(ds)/dble(w_samp)*twopi/omega)
 
-  
   ! Turn these into parameters for readability
   len_alex = 454.65 
   n = 512  !1024
@@ -60,12 +59,7 @@ program Gross_Pitaevskii_1d
   nu_alex = 0.01  !0.01
   del_alex = 1.2_dl !1.2_dl
   om_alex = 64./2./sqrt(nu_alex)
-  
-  ! This is for sampling the ICs, which seems to be working
-  !call initialise_model_symmetric(2, nu_alex, del_alex, om_alex, rho_alex)
-  !call setup_w_model( 2, n, len_alex/n )
-  !call sample_ics(1000, n, 2, n/4, 100.)
-  
+   
   phi_init = 0._dl ! 0.01*twopi
   call initialise_model_symmetric(2, nu_alex, del_alex, om_alex, rho_alex) ! fix rho
   call setup_w_model( 2, n, len_alex/n )
@@ -79,35 +73,24 @@ program Gross_Pitaevskii_1d
   fluc_params%nCut = n/2
   fluc_params%nu = nu_alex
   fluc_params%m2eff = 4._dl*nu_alex*(del_alex**2-1._dl)
+
+  fluc_params = make_spec_params( rho_alex, len_alex, nu_alex, del_alex, 'KG', (/.true.,.true./), n/2 )
+  call print_spec_params(fluc_params)
+  !call sample_ics(1000, fluc_params, n, 2)
   
-  call sample_ics(1000,fluc_params, n, 2)
-  
-  ! Initialise the fluctuations
   fld = 0._dl
   call initialise_fluctuations(fld, fluc_params)
-  !call initialise_fluctuations_white(fld, rho_alex, nCut=n/2)
-  !call initialise_fluctuations_bogoliubov(fld, rho_alex, nCut=n/2)
-  !call initialise_fluctuations_kg_long(fld, rho, 4*nu*(del_alex**2-1._dl), n/2, (/.true.,.false./))
-  !call initialise_fluctuations_white(fld, fluc_params)
-  ! Add displaced mean field
   fld(:,1,1) = fld(:,1,1) + 1.
   fld(:,1,2) = fld(:,1,2) - 1.
   !fld(:,1,1) = cos(0.5*phi_init) + fld(:,1,1); fld(:,2,1) = -sin(0.5*phi_init) + fld(:,2,1)
   !fld(:,1,2) = -cos(0.5*phi_init) + fld(:,1,2); fld(:,2,2) = -sin(0.5*phi_init) + fld(:,2,2)
 
-  ! Fix this up, then change the time-stepper call
-  time_stepper%dt = (twopi/om_alex)/dble(w_samp)
-  time_stepper%out_size = 8  ! Fix this
-  time_stepper%tcur = 0._dl
-  time_stepper%n_out_steps = 2.*45.456 / ((twopi/om_alex)/dble(2.))
+  call set_time_steps_oscillator(time_stepper, om_alex, w_samp, out_size=8, t_final=2.*45.456)
+  call print_time_stepper(time_stepper)
+  call time_evolve_stepper(fld, time_stepper, verbose_=.false.)
+  
   !call time_evolve( (twopi/om_alex)/dble(w_samp), 2.*45.465, (twopi/om_alex)/dble(2.) )
-  !call time_evolve( (twopi/om_alex)/dble(w_samp), 
-
-  !call time_evolve( (twopi/om_alex)/dble(w_samp), 45.465, (twopi/om_alex)/dble(w_samp)*8 )
   !call time_evolve( (twopi/om_alex)/dble(w_samp), sqrt(0.44)*twopi*2.*sqrt(nu_alex)*5, (twopi/om_alex)/dble(w_samp)*8 )
-  ! For testing homogeneous dynamics
-  !call time_evolve( (twopi/om_alex)/dble(w_samp), twopi/sqrt(del_alex**2-1.)/(2.*sqrt(nu))*8., twopi/sqrt(del_alex**2-1.)/(2.*sqrt(nu))/32. )
-
   
 #ifdef PREHEAT_SINGLE
   call initialise_model_symmetric(2, 1.e-2, 0._dl, 0._dl, 1000.)
@@ -121,7 +104,6 @@ program Gross_Pitaevskii_1d
   print*,"w_n = ",wn
   
   !phi0 = 0.2*twopi, wn = 6; len_2=50, n=256 gives cool behaviour
-
   phi0 = 0.2*twopi; wn = 3
   
   call initialise_preheating_sine_wave(fld,phi0,1.e-4,wn)
@@ -222,9 +204,7 @@ contains
     ! Lots of nonlocality to kill in here
     do i=1,nSamp
        fld = 0._dl
-       !call initialise_fluctuations_white_long(fld, rho, nCut=nCut)
-       !call initialise_fluctuations_bogoliubov_long(fld, rho, nCut=nCut)
-       call initialise_fluctuations_kg(fld, spec_params)
+       call initialise_fluctuations(fld, spec_params)
        fld(:,1,1) = 1._dl + fld(:,1,1)
        fld(:,1,2) = -1._dl + fld(:,1,1)
 
@@ -307,25 +287,6 @@ contains
     fld(:,1,2) = rho_*cos(phi0); fld(:,2,2) = rho_*sin(phi0)
   end subroutine initialise_mean_preheating
   
-  ! Subroutine to initialize fluctuations around constrained IR field
-  ! This is copy/paste from above, actually need to rewrite it
-  ! Move this into the fluctuations module
-#ifdef CONSTRAINED
-  subroutine initialise_constrained_fluctuations_IR(fld)
-    real(dl) :: df(1:nLat), spec(1:nLat/2+1)
-    integer :: i,j
-
-    spec = 0._dl
-    do i=2,nLat/2
-       spec(i) = (0.5_dl)**0.5 / sqrt(len*rho)
-    enddo
-    do i = 1,nFld; do j=1,2  ! i and j ordering is wrong
-       call generate_1dGRF(df,spec(1:128),.false.)
-       fld(:,i,j) = fld(:,i,j) + df
-    enddo; enddo
-  end subroutine initialise_constrained_fluctuations_IR
-#endif
-
   subroutine initialise_preheating_sine_wave(fld,phi0,amp,wn)
     real(dl), dimension(:,:,:), intent(out) :: fld
     real(dl), intent(in) :: phi0

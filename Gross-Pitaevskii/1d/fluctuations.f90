@@ -11,23 +11,45 @@ module Fluctuations
   type SpecParams
      real(dl) :: rho, len, m2eff  ! Get rid of len
      real(dl) :: nu, lamEff
-     integer :: nCut
-     character(8) :: type
-     logical, dimension(2) :: modes ! Update to nFlds
+     integer :: nCut = 1
+     character(8) :: type = 'BOGO'
+     logical, dimension(2) :: modes = (/.true.,.true./) ! Update for nFlds
   end type SpecParams
   
 contains
 
   ! Get this to take in model parameters
-  function make_spec_params() result(params)
+  function make_spec_params(rho, len, nu, lamEff, type, modes, nCut) result(params)
+    real(dl), intent(in) :: rho, len, nu, lamEff
+    character(*), intent(in) :: type
+    logical, dimension(1:2), intent(in) :: modes
+    integer, intent(in) :: nCut
+    
     type(SpecParams) :: params
 
-    params%rho = 1._dl
-    params%len = 1._dl
-    params%m2eff = 1._dl
-    params%type = 'BOGO'
-    params%modes(1:2) = (/.true.,.true./)
+    params%nCut = nCut
+    params%rho = rho
+    params%len = len
+    params%nu = nu
+    params%lamEff = lamEff
+    params%m2eff = 4._dl*nu*(lamEff**2-1._dl)
+    params%type = trim(type)
+    params%modes(1:2) = modes(1:2)
   end function make_spec_params
+
+  subroutine print_spec_params(params)
+    type(SpecParams), intent(in) :: params
+
+    print*,"=============================="
+    print*,"Fluctuation Properties"
+    print*,"------------------------------"
+    print*,"type of fluctuations   : ", params%type
+    print*,"m^2_eff                : ", params%m2eff
+    print*,"Initialise total modes : ", params%modes(1)
+    print*,"Initialise rel modes   : ", params%modes(2)
+    print*,"Spectral cutff number  : ", params%nCut
+    print*,"=============================="
+  end subroutine print_spec_params
   
   subroutine initialise_fluctuations(fld, params)
     real(dl), dimension(:,:,:), intent(inout) :: fld
