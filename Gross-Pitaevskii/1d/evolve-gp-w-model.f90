@@ -12,91 +12,72 @@ program Gross_Pitaevskii_1d
 
   implicit none
 
-  type Model
-     !type(ModelParams) :: model_params
-     type(SpecParams) :: spec_params
-     type(TimeStepper) :: time_params
-  end type Model
-  
   real(dl), dimension(:,:,:), pointer :: fld
   real(dl), pointer :: tcur
-  real(dl) :: dtout_, dt_  ! Remove this ugliness
-
-  integer :: n
-  integer :: ds, w_samp
-
-  ! Fixing parameters for now
-  real(dl), parameter :: omega_s = 50._dl, rho_s = 1000._dl, del_s = 1._dl+0.4_dl
-  real(dl), parameter :: len_s = 100._dl
-
-  real(dl) :: phi0, kfloq
-  integer :: wn
-
-  integer :: i, nSamp
-
-  ! Move params somewhere else
-  real(dl) :: om_alex, rho_alex, nu_alex, del_alex, phi_init, len_alex
-
   type(SpecParams) :: fluc_params
   type(TimeStepper) :: time_stepper
-  
-  n=512
-  ds = 1; w_samp=16
 
+  integer :: i ! Automatic creation of array
+  
+  ! These are input parameters used for readability
+  integer :: n
+
+  ! Fixing parameters for now
+  real(dl), parameter :: omega_s = 50._dl, del_s = 1._dl + 0.4_dl !rho_s = 1000._dl
+  real(dl), parameter :: len_s = 100._dl
+
+  ! Used for preheating code
+  real(dl) :: phi0, kfloq
+  integer :: wn
+  integer :: nSamp
+
+  ! Move params somewhere else
+  real(dl) :: om_gpe, nu_gpe, del_gpe, len_gpe
+  real(dl) :: rho_alex, phi_init
+
+  integer :: ds, w_samp
+  
+  
   ! Old stuff for false vacuum
+  !n=512
+  !ds = 1; w_samp=16
   !call initialise_model(2, del_s, 2.e-3, 1._dl, 0.5_dl, 0.5_dl, omega_s, rho_s)
-  !call setup_w_model( 2, n, len_s/(2.*(nu)**0.5)/dble(n) )
-  !fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
-  !tcur => yvec(2*nLat*nFld+1)
+  !call setup_simulation( 2, n, len_s/(2.*(nu)**0.5)/dble(n), fld, tcu )
   !call initialise_false_vacuum(fld)
   !call time_evolve((1._dl/dble(w_samp))*twopi/omega,100._dl,dble(ds)/dble(w_samp)*twopi/omega)
 
-  ! Turn these into parameters for readability
-  len_alex = 454.65 
-  n = 512  !1024
+  n = 1024
+  len_gpe = 454.65
+  nu_gpe = 0.01
+  del_gpe = 1.2_dl
+  om_gpe = 64./2./sqrt(nu_gpe)
+  
   w_samp = 16
-  rho_alex = 1000. !43.99 !1000. !43.99 !43.99 
-  nu_alex = 0.01  !0.01
-  del_alex = 1.2_dl !1.2_dl
-  om_alex = 64./2./sqrt(nu_alex)
-   
-  phi_init = 0._dl ! 0.01*twopi
-  call initialise_model_symmetric(2, nu_alex, del_alex, om_alex, rho_alex) ! fix rho
-  call setup_w_model( 2, n, len_alex/n )
-  fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
-  tcur => yvec(2*nLat*nFld+1)
+  rho_alex = 43.99 ! This is only really needed for the ICs, not the model setup 
+  phi_init = 0._dl  ! 0.01*twopi
 
-  fluc_params%rho = rho_alex
-  fluc_params%len = len_alex
-  fluc_params%type = 'KG'
-  fluc_params%modes = (/.true.,.true./)
-  fluc_params%nCut = n/2
-  fluc_params%nu = nu_alex
-  fluc_params%m2eff = 4._dl*nu_alex*(del_alex**2-1._dl)
+  call setup_simulation( 2, n, len_gpe/n, fld, tcur )
+  call initialise_model_symmetric( 2, nu_gpe, del_gpe, om_gpe ) ! fix rho, num-field nonlocality
 
-  fluc_params = make_spec_params( rho_alex, len_alex, nu_alex, del_alex, 'KG', (/.true.,.true./), n/2 )
+  fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'KG', (/( .true., i=1,size(fld,dim=3))/), n/2 )
   call print_spec_params(fluc_params)
-  !call sample_ics(1000, fluc_params, n, 2)
+  call sample_ics(1000, fluc_params, n, 2)
   
   fld = 0._dl
   call initialise_fluctuations(fld, fluc_params)
-  fld(:,1,1) = fld(:,1,1) + 1.
-  fld(:,1,2) = fld(:,1,2) - 1.
+  fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) - 1.
+  !fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) + 1.
   !fld(:,1,1) = cos(0.5*phi_init) + fld(:,1,1); fld(:,2,1) = -sin(0.5*phi_init) + fld(:,2,1)
   !fld(:,1,2) = -cos(0.5*phi_init) + fld(:,1,2); fld(:,2,2) = -sin(0.5*phi_init) + fld(:,2,2)
 
-  call set_time_steps_oscillator(time_stepper, om_alex, w_samp, out_size=8, t_final=2.*45.456)
-  call print_time_stepper(time_stepper)
-  call time_evolve_stepper(fld, time_stepper, verbose_=.false.)
+  !call set_time_steps_oscillator(time_stepper, om_alex, w_samp, out_size=8, t_final=2.*45.456)
+  !call print_time_stepper(time_stepper)
+  !call time_evolve_stepper(fld, time_stepper, verbose_=.false.)
   
-  !call time_evolve( (twopi/om_alex)/dble(w_samp), 2.*45.465, (twopi/om_alex)/dble(2.) )
-  !call time_evolve( (twopi/om_alex)/dble(w_samp), sqrt(0.44)*twopi*2.*sqrt(nu_alex)*5, (twopi/om_alex)/dble(w_samp)*8 )
-  
+! With improved interface, rewrite this
 #ifdef PREHEAT_SINGLE
-  call initialise_model_symmetric(2, 1.e-2, 0._dl, 0._dl, 1000.)
-  call setup_w_model(2, n, len_s/(2.*(nu)**0.5)/dble(n))
-  fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
-  tcur => yvec(2*nLat*nFld+1)
+  call initialise_model_symmetric( 2, 1.e-2, 0._dl, 0._dl )
+  call setup_simulation(2, n, len_s/(2.*(nu)**0.5)/dble(n), fld, tcur)
   
   phi0 = 0.2*twopi  ! 0.035*twopi has no resonance band with mL = 50
   kfloq = floquet_wavenumber(phi0)  ! phi0/2./2.**0.5 ! in units of m
@@ -109,12 +90,11 @@ program Gross_Pitaevskii_1d
   call initialise_preheating_sine_wave(fld,phi0,1.e-4,wn)
   call time_evolve(twopi/128./(2.*nu**0.5), twopi*100./(2.*nu**0.5), twopi/16./(2.*nu**0.5))
 #endif
-  
+
+! With improved interface, rewrite this
 #ifdef PREHEAT
-  call initialise_model_symmetric(2, 1.e-1, 0._dl, 0._dl, 1000.)
-  call setup_w_model(2, n, len_s/(2.*nu**0.5)/dble(n))
-  fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
-  tcur => yvec(2*nLat*nFld+1)
+  call initialise_model_symmetric(2, 1.e-1, 0._dl, 0._dl )  ! 1000 is the value for rho
+  call setup_simulation(2, n, len_s/(2.*nu**0.5)/dble(n), fld, tcur)
 
   phi0 = 0.2*twopi
   kfloq = floquet_wavenumber(phi0)  ! phi0/2./2.**0.5
@@ -132,6 +112,32 @@ program Gross_Pitaevskii_1d
   
 contains
 
+  subroutine evolve_ensemble(nSamp, stepper, spec_params)
+    integer, intent(in) :: nSamp
+    type(TimeStepper), intent(inout) :: stepper
+    type(SpecParams), intent(in) :: spec_params
+
+    real(dl), dimension(1:size(fld,dim=3)) :: mean_fld
+    integer :: i,j
+
+    print*,"Running an ensemble of ",nSamp," realisations"
+    call print_time_stepper(stepper)
+    call print_spec_params(spec_params)
+
+    mean_fld = 0._dl
+    mean_fld(1) = 1._dl
+    mean_fld(2) = -1._dl
+    
+    do i=1,nSamp
+       fld = 0._dl
+       call initialise_fluctuations(fld, spec_params)
+       do j=1,size(fld,dim=3)
+          fld(:,1,j) = fld(:,1,j) + mean_fld(j)
+       enddo
+       call time_evolve_stepper(fld, stepper, verbose_=.false.)
+    enddo
+  end subroutine evolve_ensemble
+  
   !>@brief Returns up limit of Floquet band in units of m, for sine-Gordon model
   real(dl) function floquet_wavenumber(phi0) result(kfloq)
     real(dl), intent(in) :: phi0
@@ -167,8 +173,8 @@ contains
     ! Leading approximation
     theta = 0.125_dl*twopi + 0.25_dl*dg/(1._dl-gc - nu)
     theta = find_max_angle(nu,dg,gc)
-    fld(:,1,1) =  (2._dl*rho)**0.5*cos(theta); fld(:,2,1) = 0._dl
-    fld(:,1,2) = -(2._dl*rho)**0.5*sin(theta); fld(:,2,2) = 0._dl
+    fld(:,1,1) =  (2._dl*rho_bg)**0.5*cos(theta); fld(:,2,1) = 0._dl
+    fld(:,1,2) = -(2._dl*rho_bg)**0.5*sin(theta); fld(:,2,2) = 0._dl
   end subroutine find_homogeneous_fv
 
   
@@ -178,7 +184,7 @@ contains
     type(SpecParams), intent(in) :: spec_params
     integer, intent(in) :: nLat, nFld
     
-    integer :: o, i, j
+    integer :: o, i
     real(dl), dimension(1:nLat,1:2,1:nFld) :: fld_loc
 
     open(unit=newunit(o),file='initial_conditions.bin', access='stream')
@@ -193,35 +199,23 @@ contains
     enddo
     close(o)
   end subroutine sample_ics
-
-  subroutine time_evolve_ensemble(nSamp, nLat, nFld, spec_params)
-    integer, intent(in) :: nSamp
-    integer, intent(in) :: nLat, nFld
-    type(SpecParams) :: spec_params
-
-    integer :: i
-
-    ! Lots of nonlocality to kill in here
-    do i=1,nSamp
-       fld = 0._dl
-       call initialise_fluctuations(fld, spec_params)
-       fld(:,1,1) = 1._dl + fld(:,1,1)
-       fld(:,1,2) = -1._dl + fld(:,1,1)
-
-       !call time_evolve()
-    enddo
-  end subroutine time_evolve_ensemble
   
   !>@brief
   !> Initialise the integrator, setup FFTW, boot MPI, and perform other necessary setup
   !> before starting the program
-  subroutine setup_w_model(nf,nl,dx)
+  subroutine setup_simulation(nf,nl,dx, fld, tcur)
     integer, intent(in) :: nf,nl
     real(dl), intent(in) :: dx
-    call initialise_lattice(nf,nl,dx)
+    real(dl), dimension(:,:,:), pointer :: fld
+    real(dl), pointer :: tcur
+    
+    call create_lattice(nf,nl,dx)
     call init_integrator(nVar)
-  end subroutine setup_w_model
 
+    fld(1:nLat,1:2,1:nFld) => yvec(1:2*nLat*nFld)
+    tcur => yvec(2*nLat*nFld+1)
+  end subroutine setup_simulation
+  
   ! Convert this to take a TimeStepper.  Or better, a Model object
   subroutine time_evolve(dt,tend,dtout)
     real(dl), intent(in) :: dt
@@ -234,16 +228,15 @@ contains
     outsize = floor(dtout/dt)
     nums = floor(tend/dt)/outsize
     
-    dt_ = dt; dtout_ = dt*outsize ! Why the hell is this nonlocality here?  For output file, fix it!!!!
     call output_fields_binary(fld)
-    call output_log_file(fld, 0.)
+    call output_log_file(fld, 0., dt)
     
     tcur = 0._dl
     do i=1,nums
        do j=1,outsize
           call gl10(yvec,dt)
        enddo
-       call output_log_file(fld, dt*i*outsize)
+       call output_log_file(fld, dt*i*outsize, dt)
        call output_fields_binary(fld)
     enddo
   end subroutine time_evolve
@@ -319,58 +312,22 @@ contains
     fld(:,1,1) = sqrt(rho_ave*(1._dl-drho_wave)); fld(:,2,1) = 0._dl
     fld(:,1,2) = sqrt(rho_ave*(1._dl+drho_wave))*cos(phi0); fld(:,2,2) = sqrt(rho_ave*(1._dl+drho_wave))*sin(phi0) 
   end subroutine initialise_preheating_density_wave
-  
+
+  ! Do I use this or need it?  It's clearly got buggy behaviour with the rho
   subroutine initialise_fields_sine(fld)
     real(dl), dimension(:,:,:), intent(inout) :: fld
-    real(dl), parameter :: rho_ave = 1._dl
+    real(dl), parameter :: rho_bg = 1._dl
     integer :: i; real(dl) :: dth, theta
     
-    call initialise_mean_fields(fld,rho_ave)
+    call initialise_mean_fields(fld,rho_bg)
     yvec(4*nLat+1) = 0._dl  ! turn this into tcur
 
     dth = twopi /dble(nLat)
-    fld(:,1,1) = rho_ave; fld(:,2,1) = 0._dl  ! this should be a square root
+    fld(:,1,1) = rho_bg; fld(:,2,1) = 0._dl  ! this should be a square root
     do i=1,nLat
        theta = 0.5_dl*twopi + (i-1)*dth
-       fld(i,1,2) = rho_ave*cos(theta); fld(i,2,2) = rho*sin(theta)
+       fld(i,1,2) = rho_bg*cos(theta); fld(i,2,2) = rho_bg*sin(theta)
     enddo
   end subroutine initialise_fields_sine
-
-! Refactored into a separate file
-#ifdef OUTPUT
-!!!!!!!!!!!!!!!!!!!!
-! Output Subroutines
-!!!!!!!!!!!!!!!!!!!!
-
-  subroutine output_log_file(fld,t,fName)
-    real(dl), dimension(:,:,:), intent(in) :: fld
-    real(dl), intent(in) :: t
-    character(80), intent(in), optional :: fName
-
-    character(80) :: fn
-    integer, save :: oFile
-    real(dl) :: en
-    logical :: o
-    
-    fn = 'log.out'
-    if (present(fName)) fn = trim(fName)
-    
-    inquire(file=trim(fn),opened=o)
-    if (.not.o) then
-       inquire(file=trim(fn),opened=o); if (o) close(oFile)
-       open(unit=newunit(oFile), file=trim(fn))
-       write(oFile,*) "# Lattice Parameters"
-       write(oFile,*) "# n = ",nLat," dx = ",dx
-       write(oFile,*) "# Time Stepping parameters"
-       write(oFile,*) "# dt = ",dt_, " dt_out = ",dtout_
-       write(oFile,*) "# Model Parameters"
-       write(oFile,*) "# nu = ",nu," g = ",gs, " w = ",omega
-       write(oFile,*) "# rho = ", rho
-       write(oFile,*) "# delta = ", del
-       write(oFile,*) "# t_{heal}   2\sqrt{nu}t_{heal} "
-    endif
-    write(oFile,*) t, 2.*sqrt(nu)*t
-  end subroutine output_log_file
-#endif
   
 end program Gross_Pitaevskii_1d

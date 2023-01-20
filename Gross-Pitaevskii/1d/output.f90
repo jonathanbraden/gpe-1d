@@ -17,7 +17,7 @@ contains
     write(oFile,*) "# dt = ",dt
     write(oFile,*) "# Model Parameters :"
     write(oFile,*) "# nu = ",nu,", g = ",gs," w = ",omega
-    write(oFile,*) "# rho = ",rho
+    !write(oFile,*) "# rho = ",rho
     write(oFile,*) "# delta = ",del
     write(oFile,*) "#============================"
     write(oFile,*) "# t_{heal}   2\sqrt{nu}t_{heal}   rho"

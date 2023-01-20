@@ -30,18 +30,23 @@ contains
     verbose = .false.; if (present(verbose_)) verbose = verbose_
     
     if (output) call output_fields_binary(fld)
-    if (log) call output_log_file(fld, 0._dl)
-    
+    if (log) call output_log_file(fld, 0._dl, stepper%dt)
+       
     do i=1,stepper%n_out_steps
        if (verbose) print*,"Starting output step ",i
        do j=1,stepper%out_size
           call gl10(yvec, stepper%dt)
        enddo
        if (output) call output_fields_binary(fld)
-       if (log) call output_log_file(fld, i*dt_out)
+       if (log) call output_log_file(fld, i*dt_out, stepper%dt)
     enddo
   end subroutine time_evolve_stepper
 
+  ! I need to implement this.  Check that my time-step is short enough
+  subroutine check_consistency(stepper)
+    type(TimeStepper), intent(in) :: stepper
+  end subroutine check_consistency
+  
   subroutine set_time_steps_oscillator(stepper, omega, w_samp, out_size, t_final)
     type(TimeStepper), intent(inout) :: stepper
     real(dl), intent(in) :: omega

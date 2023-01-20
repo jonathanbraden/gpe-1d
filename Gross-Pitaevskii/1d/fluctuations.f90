@@ -40,15 +40,15 @@ contains
   subroutine print_spec_params(params)
     type(SpecParams), intent(in) :: params
 
-    print*,"=============================="
+    print*,"===================================="
     print*,"Fluctuation Properties"
-    print*,"------------------------------"
+    print*,"------------------------------------"
     print*,"type of fluctuations   : ", params%type
     print*,"m^2_eff                : ", params%m2eff
     print*,"Initialise total modes : ", params%modes(1)
     print*,"Initialise rel modes   : ", params%modes(2)
     print*,"Spectral cutff number  : ", params%nCut
-    print*,"=============================="
+    print*,"===================================="
   end subroutine print_spec_params
   
   subroutine initialise_fluctuations(fld, params)
@@ -106,7 +106,11 @@ contains
     real(dl) :: m2eff, dk, keff, norm
     integer :: nCut, i,j
     logical, dimension(2) :: modes
+    real(dl) :: len, rho
 
+    len = params%len
+    rho = params%rho
+    
     modes(1:2) = params%modes(1:2)    
     m2eff = params%m2eff
     nCut = params%nCut
