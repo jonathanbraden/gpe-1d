@@ -19,20 +19,27 @@ module Fluctuations
 contains
 
   ! Get this to take in model parameters
-  function make_spec_params(rho, len, nu, lamEff, type, modes, nCut) result(params)
+  function make_spec_params(rho, len, nu, lamEff, type, modes, nCut, fv_) result(params)
     real(dl), intent(in) :: rho, len, nu, lamEff
     character(*), intent(in) :: type
     logical, dimension(1:2), intent(in) :: modes
     integer, intent(in) :: nCut
+    logical, intent(in), optional :: fv_
     
     type(SpecParams) :: params
 
+    logical :: fv
+    integer :: sig
+    
+    fv = .true.; if (present(fv_)) fv = fv_
+    sig = 1; if (fv) sig = -1 
+  
     params%nCut = nCut
     params%rho = rho
     params%len = len
     params%nu = nu
     params%lamEff = lamEff
-    params%m2eff = 4._dl*nu*(lamEff**2-1._dl)
+    params%m2eff = 4._dl*nu*(lamEff**2 + sig*1._dl)  ! Adjust for true vs false
     params%type = trim(type)
     params%modes(1:2) = modes(1:2)
   end function make_spec_params
@@ -62,12 +69,52 @@ contains
        call initialise_fluctuations_bogoliubov(fld, params)
     case ('WHITE')
        call initialise_fluctuations_white(fld, params)
+    case ('BOGO_R')
+       call initialise_fluctuations_bogoliubov_real(fld, params)
+    case ('KG_R')
+       call initialise_fluctuations_kg_real(fld, params)
+    case ('WHITE_R')
+       call initialise_fluctuations_white_real(fld, params)
     case default
        call initialise_fluctuations_white(fld, params)
     end select
   end subroutine initialise_fluctuations
 
   subroutine initialise_fluctuations_white(fld, params)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    type(SpecParams), intent(in) :: params
+
+    complex(dl), dimension( 1:size(fld,dim=1) ) :: df
+    real(dl), dimension( 1:size(fld,dim=1)/2+1 ) :: spec
+    integer :: num_fld, n
+    integer :: i, j
+
+    real(dl) :: rho, len, norm
+    integer :: nCut
+
+    rho = params%rho
+    len = params%len
+    nCut = params%nCut
+
+    norm = 1._dl / sqrt(2._dl*rho*len)  ! Check factors of 2 in here
+    
+    n = size(fld,dim=1)
+    num_fld = size(fld,dim=3)
+    
+    spec = 0._dl
+    do i=2,n/2; do j=1,2
+       spec(i) = 1._dl
+    enddo; enddo
+
+    do i = 1,num_fld
+       call generate_1dGRF_cmplx(df, spec(1:nCut))
+       df = df * norm
+       fld(:,1,i) = fld(:,1,i) + real(df)
+       fld(:,2,i) = fld(:,2,i) + aimag(df)
+    enddo
+  end subroutine initialise_fluctuations_white
+
+  subroutine initialise_fluctuations_white_real(fld, params)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     type(SpecParams), intent(in) :: params
 
@@ -95,9 +142,57 @@ contains
        call generate_1dGRF(df, spec(1:nCut), .false.)
        fld(:,j,i) = fld(:,j,i) + df
     enddo; enddo
-  end subroutine initialise_fluctuations_white
+  end subroutine initialise_fluctuations_white_real
 
+  ! This if broken.  Figure out how to fix
   subroutine initialise_fluctuations_kg(fld, params)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    type(SpecParams) :: params
+
+    !real(dl), dimension(1:size(fld,dim=1),1:2) :: df_rel, df_tot
+    complex(dl), dimension(1:size(fld,dim=1)) :: df_rel, df_tot
+    real(dl) :: spec(1:size(fld,dim=1)/2+1)
+    real(dl) :: m2eff, dk, keff, norm
+    integer :: nCut, i,j
+    logical, dimension(2) :: modes
+    real(dl) :: len, rho
+
+    len = params%len
+    rho = params%rho
+    
+    modes(1:2) = params%modes(1:2)    
+    m2eff = params%m2eff
+    nCut = params%nCut
+    
+    norm = 1._dl / sqrt(len*rho) 
+    dk = twopi/len
+
+    df_rel = 0._dl
+    spec = 0._dl
+    do i=2,nLat/2
+       keff = (i-1)*dk
+       spec(i) = 1._dl/sqrt(2._dl*keff)
+    enddo
+    if (modes(2)) call generate_1dGRF_cmplx( df_rel, spec(1:nCut) )
+    df_rel = df_rel * norm
+    
+    df_tot = 0.
+    spec = 0._dl
+    do i=1,nLat/2
+       keff = (i-1)*dk
+       spec(i) = 1._dl / sqrt(2._dl) / (keff**2+m2eff)**0.25 
+    enddo
+    if (modes(1)) call generate_1dGRF_cmplx( df_tot, spec(1:nCut) )
+    df_tot = df_tot*norm
+    
+    fld(:,1,1) = fld(:,1,1) + sqrt(0.5_dl)*( real(df_tot) + real(df_rel) ) 
+    fld(:,2,1) = fld(:,2,1) + sqrt(0.5_dl)*( aimag(df_tot) - aimag(df_rel) )
+    fld(:,1,1) = fld(:,1,1) + sqrt(0.5_dl)*( real(df_tot) + real(df_rel) ) 
+    fld(:,2,2) = fld(:,2,2) + sqrt(0.5_dl)*( aimag(df_tot) - aimag(df_rel) )
+   
+  end subroutine initialise_fluctuations_kg
+  
+  subroutine initialise_fluctuations_kg_real(fld, params)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     type(SpecParams) :: params
 
@@ -125,9 +220,9 @@ contains
        spec(i) = 1._dl/sqrt(keff)
     enddo
     spec = spec * norm
-    do i = 1,nFld; do j=1,2
+    do j=1,2
        if (modes(2)) call generate_1dGRF(df_rel(:,j), spec(1:nCut), .false.)
-    enddo; enddo
+    enddo
 
     df_tot = 0.
     spec = 0._dl
@@ -136,17 +231,71 @@ contains
        spec(i) = 1._dl / (keff**2+m2eff)**0.25 
     enddo
     spec = spec * norm
-    do i=1,nFld; do j=1,2
+    do j=1,2
        if (modes(1)) call generate_1dGRF(df_tot(:,j), spec(1:nCut), .false.)
-    enddo; enddo
+    enddo
 
     do j=1,2
        fld(:,j,1) = fld(:,j,1) + sqrt(0.5_dl)*( df_tot(:,j) + df_rel(:,j) )
        fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
     enddo
-  end subroutine initialise_fluctuations_kg
+  end subroutine initialise_fluctuations_kg_real
   
   subroutine initialise_fluctuations_bogoliubov(fld, params)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    type(SpecParams), intent(in) :: params
+
+    complex(dl), dimension(1:size(fld,dim=1)) :: df_rel, df_tot
+    real(dl), dimension(1:size(fld,dim=1)/2+1) :: spec
+    integer :: i,j
+    real(dl) :: norm, dk, keff
+    real(dl) :: lameff, nu_
+    real(dl) :: m2eff
+
+    integer :: nCut
+
+    df_rel = 0._dl
+    df_tot = 0._dl
+    
+    nCut = params%nCut
+    lameff = params%lamEff
+    nu_ = params%nu
+    m2eff = params%m2eff
+    
+    ! Fix all this nonlocality
+    norm = 1._dl / sqrt(2._dl*len*params%rho)  ! check factor of 2
+    dk = twopi / len   ! Fix this nonlocality
+    
+    ! Relative modes
+    spec = 0._dl
+    do i=2,nLat/2
+       keff = (i-1)*dk
+       spec(i) = sqrt( (keff**2+2._dl)/(keff*sqrt(keff**2+4._dl)) )
+    enddo
+    df_rel = 0.
+    if (params%modes(2)) call generate_1dGRF_cmplx(df_rel, spec(1:nCut))
+    df_rel = df_rel * norm
+    
+    ! Now get total modes
+    spec = 0._dl
+    do i=2,nLat/2
+       keff = (i-1)*dk
+       spec(i) = sqrt( (keff**2 + 2._dl - 4._dl*nu_)  / sqrt(keff**2+m2eff) / sqrt(keff**2+4._dl-4._dl*nu_*(lameff**2+1._dl)) )
+    enddo
+    df_tot = 0.
+    if (params%modes(1)) call generate_1dGRF_cmplx(df_tot, spec(1:nCut))
+    df_tot = df_tot * norm
+
+    
+    
+    fld(:,1,1) = fld(:,1,1) + sqrt(0.5_dl)*( real(df_tot) + real(df_rel) )
+    fld(:,1,2) = fld(:,1,2) + sqrt(0.5_dl)*( real(df_tot) - real(df_rel) )
+    fld(:,2,1) = fld(:,2,1) + sqrt(0.5_dl)*( aimag(df_tot) + aimag(df_rel) )
+    fld(:,2,2) = fld(:,2,2) + sqrt(0.5_dl)*( aimag(df_tot) - aimag(df_rel) )
+   
+  end subroutine initialise_fluctuations_bogoliubov
+
+  subroutine initialise_fluctuations_bogoliubov_real(fld, params)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     type(SpecParams), intent(in) :: params
 
@@ -196,8 +345,7 @@ contains
        fld(:,j,1) = fld(:,j,1) + sqrt(0.5_dl)*( df_tot(:,j) + df_rel(:,j) )
        fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
     enddo   
-  end subroutine initialise_fluctuations_bogoliubov
-
+  end subroutine initialise_fluctuations_bogoliubov_real
   
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! More verbose versions of calls, with parameters explicitly listed

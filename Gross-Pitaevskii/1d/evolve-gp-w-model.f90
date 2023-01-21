@@ -46,34 +46,42 @@ program Gross_Pitaevskii_1d
   !call initialise_false_vacuum(fld)
   !call time_evolve((1._dl/dble(w_samp))*twopi/omega,100._dl,dble(ds)/dble(w_samp)*twopi/omega)
 
-  n = 1024
-  len_gpe = 454.65
+  n = 512
   nu_gpe = 0.01
   del_gpe = 1.2_dl
   om_gpe = 64./2./sqrt(nu_gpe)
   
+  len_gpe = 50./2./sqrt(nu_gpe) !454.65
+  
   w_samp = 16
-  rho_alex = 43.99 ! This is only really needed for the ICs, not the model setup 
+  rho_alex = 43.99 !43.99 !43.99 ! This is only really needed for the ICs, not the model setup 
   phi_init = 0._dl  ! 0.01*twopi
 
   call setup_simulation( 2, n, len_gpe/n, fld, tcur )
   call initialise_model_symmetric( 2, nu_gpe, del_gpe, om_gpe ) ! fix rho, num-field nonlocality
 
-  fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'KG', (/( .true., i=1,size(fld,dim=3))/), n/2 )
+  !fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/( .true., i=1,size(fld,dim=3))/), n/2, fv_=.true. )
+  fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/ .true., .false. /), n/2, fv_=.true. )
   call print_spec_params(fluc_params)
-  call sample_ics(1000, fluc_params, n, 2)
-  
-  fld = 0._dl
-  call initialise_fluctuations(fld, fluc_params)
-  fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) - 1.
-  !fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) + 1.
+
+  !!! Sample initial condtions
+  nSamp = 1000
+  call sample_ics(nSamp, fluc_params, n, 2)
+
+  nSamp = 10
+  do i=1,nSamp
+     fld = 0._dl
+     call initialise_fluctuations(fld, fluc_params)
+     fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) - 1.
+     !fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) + 1.
   !fld(:,1,1) = cos(0.5*phi_init) + fld(:,1,1); fld(:,2,1) = -sin(0.5*phi_init) + fld(:,2,1)
   !fld(:,1,2) = -cos(0.5*phi_init) + fld(:,1,2); fld(:,2,2) = -sin(0.5*phi_init) + fld(:,2,2)
 
-  !call set_time_steps_oscillator(time_stepper, om_alex, w_samp, out_size=8, t_final=2.*45.456)
-  !call print_time_stepper(time_stepper)
-  !call time_evolve_stepper(fld, time_stepper, verbose_=.false.)
-  
+     call set_time_steps_oscillator(time_stepper, om_gpe, w_samp, out_size=8*w_samp, t_final=len_gpe)  ! 45.456
+     call print_time_stepper(time_stepper)
+     call time_evolve_stepper(fld, time_stepper, verbose_=.false.)
+  enddo
+     
 ! With improved interface, rewrite this
 #ifdef PREHEAT_SINGLE
   call initialise_model_symmetric( 2, 1.e-2, 0._dl, 0._dl )

@@ -209,10 +209,6 @@ contains
     fields = deviate
 ! Hmm, I don't think this works the way I want it to...
 !    fields = dreal(deviate)*spec(:,1) + iImag*dimag(deviate)*spec(:,2)
-! To Do : add in the correlation
-
-    plan_inv = fftw_plan_dft_1d(n,fields,fields,FFTW_BACKWARD,FFTW_ESTIMATE)
-!    call fftw_
   end subroutine generate_correlated_1dGRF
 
 #ifdef TESTING
@@ -316,4 +312,70 @@ contains
     deallocate(seeds)
   end subroutine initialize_rand
 
+  ! This is completely broken if I initialize the Nyquist mode.
+  ! Build in some checks to avoid this
+  !
+  ! Need to fix up the normalization of the Gaussian random deviates
+  subroutine generate_1dGRF_cmplx(field, spectrum)
+    complex(C_DOUBLE_COMPLEX), dimension(:), intent(inout) :: field
+    real(dl), dimension(:), intent(in) :: spectrum
+
+    real(dl), dimension(1:size(spectrum)) :: spectrum_u, spectrum_v
+
+    integer :: nlat, nn, nnk
+    real(dl) :: amp, phase
+    complex(dl) :: deviate
+    complex(C_DOUBLE_COMPLEX) :: Fk_u(1:size(field)), Fk_v(1:size(field))
+    complex(C_DOUBLE_COMPLEX) :: Fk(1:size(field)), fld_tmp(1:size(field))
+    logical :: cut
+    type(C_PTR) :: fft_plan
+
+    integer :: i, ii, ic
+
+    ! Fix this conversion to account for the fact I stuck the normalization factor in
+    spectrum_u = sqrt(0.5*(spectrum**2+1._dl)) ! Won't work for KG
+    spectrum_v = sqrt(abs(0.5*(spectrum**2-1._dl))) ! Won't work for KG
+
+    !print*,spectrum_u
+    !print*,spectrum_v
+    
+    nlat = size(field); nn = nlat/2; nnk = size(spectrum); cut = .false.
+    if (nn > nnk) then
+       print*,"Warning spectrum is smaller than the number of required Fourier modes in 1dGRF.  Additional high frequency modes will not be sampled."
+       cut = .true.
+    endif
+    
+    if (.not.seed_init) then
+       print*,"Error, random number generator not initialized.  Call initialize_rand, using default seed values"
+       call initialize_rand(75,13)
+    endif
+    
+    fft_plan = fftw_plan_dft_1d(nlat, Fk, fld_tmp, FFTW_BACKWARD, FFTW_ESTIMATE)  ! Check direction
+    
+    Fk_u = 0.
+    Fk_v = 0.
+    do i=2,nnk        ! Check these bounds are correct
+       ic = nlat+2-i  ! This should give the negative wavenumber. Add mod if needed
+       
+       call random_number(amp); call random_number(phase)
+       deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
+       Fk_u(i)  = deviate*spectrum_u(i)
+       Fk_v(ic) = -conjg(deviate)*spectrum_v(i)
+
+       !Fk_u(ic) = conjg(deviate)*spectrum_u(i) ! This makes the field purely real
+       
+       call random_number(amp); call random_number(phase)
+       deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
+       Fk_u(ic)  = deviate*spectrum_u(i)
+       Fk_v(i) = -conjg(deviate)*spectrum_v(i)
+    enddo
+
+    Fk = Fk_u
+    call fftw_execute_dft(fft_plan, Fk, fld_tmp)
+    field = fld_tmp
+    Fk = Fk_v
+    call fftw_execute_dft(fft_plan, Fk, fld_tmp)
+    field = field + fld_tmp
+  end subroutine generate_1dGRF_cmplx
+  
 end module gaussianRandomField
