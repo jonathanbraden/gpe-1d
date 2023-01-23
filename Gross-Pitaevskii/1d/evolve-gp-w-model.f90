@@ -36,7 +36,8 @@ program Gross_Pitaevskii_1d
   real(dl) :: rho_alex, phi_init
 
   integer :: ds, w_samp
-  
+
+  real(dl) :: len_pre
   
   ! Old stuff for false vacuum
   !n=512
@@ -46,56 +47,73 @@ program Gross_Pitaevskii_1d
   !call initialise_false_vacuum(fld)
   !call time_evolve((1._dl/dble(w_samp))*twopi/omega,100._dl,dble(ds)/dble(w_samp)*twopi/omega)
 
-  n = 512
+!#ifdef ALEX
+  n = 128 ! 1024 ! 512
   nu_gpe = 0.01
   del_gpe = 1.2_dl
-  om_gpe = 64./2./sqrt(nu_gpe)
-  
-  len_gpe = 50./2./sqrt(nu_gpe) !454.65
-  
+  om_gpe = 64./2./sqrt(nu_gpe)  
+  len_gpe = 454.65  ! 50./2./sqrt(nu_gpe) 
   w_samp = 16
   rho_alex = 43.99 !43.99 !43.99 ! This is only really needed for the ICs, not the model setup 
   phi_init = 0._dl  ! 0.01*twopi
 
+  nu_gpe = 0.01
+  del_gpe = 0.
+  om_gpe = 16.
+  mu = 1.-nu_gpe
+  
   call setup_simulation( 2, n, len_gpe/n, fld, tcur )
   call initialise_model_symmetric( 2, nu_gpe, del_gpe, om_gpe ) ! fix rho, num-field nonlocality
 
   !fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/( .true., i=1,size(fld,dim=3))/), n/2, fv_=.true. )
-  fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/ .true., .false. /), n/2, fv_=.true. )
+  fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/ .true., .true. /), n/8, fv_=.false. )
   call print_spec_params(fluc_params)
 
   !!! Sample initial condtions
-  nSamp = 1000
-  call sample_ics(nSamp, fluc_params, n, 2)
+  !nSamp = 1000
+  !call sample_ics(nSamp, fluc_params, n, 2)
 
-  nSamp = 10
+  nSamp = 1
   do i=1,nSamp
      fld = 0._dl
      call initialise_fluctuations(fld, fluc_params)
-     fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) - 1.
-     !fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) + 1.
+     !fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) - 1.
+     fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) + 1.
+     mu = 1.-nu
   !fld(:,1,1) = cos(0.5*phi_init) + fld(:,1,1); fld(:,2,1) = -sin(0.5*phi_init) + fld(:,2,1)
   !fld(:,1,2) = -cos(0.5*phi_init) + fld(:,1,2); fld(:,2,2) = -sin(0.5*phi_init) + fld(:,2,2)
 
-     call set_time_steps_oscillator(time_stepper, om_gpe, w_samp, out_size=8*w_samp, t_final=len_gpe)  ! 45.456
+     !call initialise_preheating_sine_wave( fld, 0., 1.e-4, 3)
+     !call initialise_preheating_density_wave( fld, 0., 1.e-4, 3)
+     !call initialise_total_density_wave(fld, 0., 1.e-4, 3)
+     
+     call set_time_steps_oscillator(time_stepper, om_gpe, w_samp, out_size=8*w_samp, t_final=45.465*4)  ! 45.465
      call print_time_stepper(time_stepper)
      call time_evolve_stepper(fld, time_stepper, verbose_=.false.)
   enddo
-     
+!#endif
+  
 ! With improved interface, rewrite this
-#ifdef PREHEAT_SINGLE
+#ifdef PREHEAT_SINGLE  
+  !phi0 = 0.2*twopi, wn = 6; len_2=50, n=256 gives cool behaviour
+  n = 128
+  len_pre = 100._dl
   call initialise_model_symmetric( 2, 1.e-2, 0._dl, 0._dl )
-  call setup_simulation(2, n, len_s/(2.*(nu)**0.5)/dble(n), fld, tcur)
+  call setup_simulation(2, n, len_pre/(2.*(nu)**0.5)/dble(n), fld, tcur)
   
   phi0 = 0.2*twopi  ! 0.035*twopi has no resonance band with mL = 50
   kfloq = floquet_wavenumber(phi0)  ! phi0/2./2.**0.5 ! in units of m
-  wn = floor(len_s*kfloq/twopi)
-  print*,"w_n = ",wn
+  wn = floor(len_pre*kfloq/twopi)
+  print*,"Using wavenumber ",wn," which is close to peak"
   
-  !phi0 = 0.2*twopi, wn = 6; len_2=50, n=256 gives cool behaviour
-  phi0 = 0.2*twopi; wn = 3
-  
-  call initialise_preheating_sine_wave(fld,phi0,1.e-4,wn)
+  call initialise_preheating_sine_wave( fld, phi0, 1.e-4, wn)
+
+  !call set_time_steps_preheat(time_stepper)
+  ! time_stepper%dt = twopi/128./(2.*nu**0.5)
+  ! time_stepper%out_size = 8
+  ! time_stepper%n_out_steps = 800
+  !call print_time_stepper(time_stepper)
+  !call time_evolve_stepper(fld, time_stepper, verbose_=.false.)
   call time_evolve(twopi/128./(2.*nu**0.5), twopi*100./(2.*nu**0.5), twopi/16./(2.*nu**0.5))
 #endif
 
@@ -103,7 +121,7 @@ program Gross_Pitaevskii_1d
 #ifdef PREHEAT
   call initialise_model_symmetric(2, 1.e-1, 0._dl, 0._dl )  ! 1000 is the value for rho
   call setup_simulation(2, n, len_s/(2.*nu**0.5)/dble(n), fld, tcur)
-
+  
   phi0 = 0.2*twopi
   kfloq = floquet_wavenumber(phi0)  ! phi0/2./2.**0.5
   print*,"floq index = ",kfloq*len_s/twopi
@@ -146,7 +164,7 @@ contains
     enddo
   end subroutine evolve_ensemble
   
-  !>@brief Returns up limit of Floquet band in units of m, for sine-Gordon model
+  !>@brief Returns the approximate peak wavenumber of the Floquet band in units of m, for sine-Gordon model
   real(dl) function floquet_wavenumber(phi0) result(kfloq)
     real(dl), intent(in) :: phi0
 
@@ -250,30 +268,6 @@ contains
   end subroutine time_evolve
   
   !>@brief
-  !> Compute the desired time step dt adaptively using precomputed conditions.
-  !>
-  !>@todo
-  !>@arg Write this.
-  real(dl) function get_dt(dx,alph,w,wfrac) result(dt)
-    real(dl), intent(in) :: dx, w
-    real(dl), optional, intent(in) :: alph, wfrac
-    real(dl) :: a_t, w_t
-    real(dl) :: dt_cft, dt_w
-    ! Need to satisfy:
-    ! - Courant Condition
-    ! - Resolve short time oscillator
-    ! - Characteristic oscillation frequency
-
-    a_t = 1._dl; w_t = 1._dl/16._dl
-    if (present(alph)) a_t = alph
-    if (present(wfrac)) w_t = wfrac
-    
-    dt_w = wfrac * twopi/w
-    dt_cft = dx**2 / alph ! Fix this to take actual dispersion relationship
-    dt = min(dt_w,dt_cft)
-  end function get_dt
-
-  !>@brief
   !> Initialise mean field with global relative phase phi0
   subroutine initialise_mean_preheating(fld, phi0, rho_norm)
     real(dl), dimension(:,:,:), intent(out) :: fld
@@ -294,13 +288,24 @@ contains
     real(dl), intent(in) :: amp
     integer, intent(in) :: wn
 
-    real(dl), parameter :: rho_ave = 1._dl
-    integer :: i
-
+    real(dl), dimension(1:size(fld,dim=1)) :: dphi_wave
+    logical, parameter :: centered = .false.
+    real(dl), parameter :: rho_bg = 1._dl
+    integer :: i, nLat
+    real(dl) :: wn_rat
+    
+    nLat = size(fld,dim=1)
+    wn_rat = twopi*wn/dble(nLat)
     do i=1,nLat
-       fld(i,1,1) = sqrt(rho_ave); fld(i,2,1) = 0._dl
-       fld(i,1,2) = sqrt(rho_ave)*cos(phi0+amp*sin(twopi*wn/len*(i-1)*dx)); fld(i,2,2) = sqrt(rho_ave)*sin(phi0+amp*sin(twopi*wn/len*(i-1)*dx))
+       dphi_wave(i) = amp*sin(wn_rat*(i-1))
     enddo
+    
+    fld(:,1,1) = sqrt(rho_bg)*cos( 0.5_dl*(phi0 + dphi_wave) ); fld(:,2,1) = sqrt(rho_bg)*sin(-0.5_dl*(phi0 + dphi_wave) )
+    fld(:,1,2) = sqrt(rho_bg)*cos( 0.5_dl*(phi0 + dphi_wave) ); fld(:,2,2) = sqrt(rho_bg)*sin( 0.5_dl*(phi0 + dphi_wave) )
+
+    ! Old, uncentered version
+    !fld(:,1,1) = sqrt(rho_bg); fld(:,2,1) = 0._dl
+    !fld(:,1,2) = sqrt(rho_bg)*cos(phi0 + dphi_wave); fld(:,2,2) = sqrt(rho_bg)*sin(phi0+dphi_wave)
   end subroutine initialise_preheating_sine_wave
 
   subroutine initialise_preheating_density_wave(fld,phi0,amp,wn)
@@ -309,33 +314,52 @@ contains
     real(dl), intent(in) :: amp
     integer, intent(in) :: wn
 
-    real(dl), dimension(1:nlat) :: drho_wave
-    real(dl), parameter :: rho_ave = 1._dl
-    integer :: i
+    real(dl), dimension(1:size(fld,dim=1)) :: drho_wave
+    real(dl), parameter :: rho_bg = 1._dl
+    integer :: i, nLat
 
+    nLat = size(fld,dim=1)
     do i=1,nLat
-       drho_wave = amp*sin(twopi*wn/len*(i-1)*dx)
+       drho_wave(i) = amp*sin(twopi*wn/dble(nLat)*(i-1))
     enddo
 
-    fld(:,1,1) = sqrt(rho_ave*(1._dl-drho_wave)); fld(:,2,1) = 0._dl
-    fld(:,1,2) = sqrt(rho_ave*(1._dl+drho_wave))*cos(phi0); fld(:,2,2) = sqrt(rho_ave*(1._dl+drho_wave))*sin(phi0) 
+    fld(:,1,1) = sqrt(rho_bg*(1._dl-drho_wave(:)))*cos(0.5_dl*phi0); fld(:,2,1) = sqrt(rho_bg*(1._dl+drho_wave(:)))*sin(-0.5_dl*phi0)
+    fld(:,1,2) = sqrt(rho_bg*(1._dl+drho_wave(:)))*cos(0.5_dl*phi0); fld(:,2,2) = sqrt(rho_bg*(1._dl+drho_wave(:)))*sin(0.5_dl*phi0) 
   end subroutine initialise_preheating_density_wave
 
-  ! Do I use this or need it?  It's clearly got buggy behaviour with the rho
-  subroutine initialise_fields_sine(fld)
+  subroutine initialise_total_density_wave(fld, phi0, amp, wn)
     real(dl), dimension(:,:,:), intent(inout) :: fld
-    real(dl), parameter :: rho_bg = 1._dl
-    integer :: i; real(dl) :: dth, theta
-    
-    call initialise_mean_fields(fld,rho_bg)
-    yvec(4*nLat+1) = 0._dl  ! turn this into tcur
+    real(dl), intent(in) :: phi0
+    real(dl), intent(in) :: amp
+    integer, intent(in) :: wn
 
-    dth = twopi /dble(nLat)
-    fld(:,1,1) = rho_bg; fld(:,2,1) = 0._dl  ! this should be a square root
+    real(dl), parameter :: rho_bg = 1._dl
+    real(dl), dimension(1:size(fld,dim=1)) :: rho_wave
+    integer :: i, nLat
+
+    nLat = size(fld,dim=1)
     do i=1,nLat
-       theta = 0.5_dl*twopi + (i-1)*dth
-       fld(i,1,2) = rho_bg*cos(theta); fld(i,2,2) = rho_bg*sin(theta)
+       rho_wave(i) = amp*sin( twopi*wn/dble(nLat)*(i-1) )
     enddo
-  end subroutine initialise_fields_sine
+    
+    fld(:,1,1) = sqrt( rho_bg*(1._dl + rho_wave) )*cos(0.5_dl*phi0); fld(:,2,1) = sqrt( rho_bg*(1._dl+rho_wave) )*sin(-0.5_dl*phi0)
+    fld(:,1,2) = sqrt( rho_bg*(1._dl + rho_wave) )*cos(0.5_dl*phi0); fld(:,2,2) = sqrt( rho_bg*(1._dl+rho_wave) )*sin(0.5_dl*phi0)
+  end subroutine initialise_total_density_wave
+
+  subroutine initialise_total_phase_wave(fld, amp, wn)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    real(dl), intent(in) :: amp
+    integer, intent(in) :: wn
+
+    real(dl), parameter :: rho_bg = 1._dl
+    real(dl), dimension(1:size(fld,dim=1)) :: phi_wave
+    integer :: i, nLat
+
+    nLat = size(fld,dim=1)
+    do i=1,nLat
+       phi_wave(i) = amp*sin( twopi*wn/dble(nlat)*(i-1) )
+    enddo
+    
+  end subroutine initialise_total_phase_wave
   
 end program Gross_Pitaevskii_1d

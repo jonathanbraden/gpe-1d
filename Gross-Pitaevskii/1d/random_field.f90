@@ -330,19 +330,23 @@ contains
     logical :: cut
     type(C_PTR) :: fft_plan
 
+    real(dl) :: sNorm
+    
     integer :: i, ii, ic
 
-    ! Fix this conversion to account for the fact I stuck the normalization factor in
-    spectrum_u = sqrt(0.5*(spectrum**2+1._dl)) ! Won't work for KG
-    spectrum_v = sqrt(abs(0.5*(spectrum**2-1._dl))) ! Won't work for KG
-
-    !print*,spectrum_u
-    !print*,spectrum_v
+    ! Use a where statement to allow easy zeroing of spectrum
+    spectrum_u = 0.
+    spectrum_v = 0.
+    sNorm = 1._dl  ! Fix this up ( the 0.5 in front needs fixing )
+    where (spectrum>sNorm)  
+       spectrum_u = sqrt( 0.5*(spectrum**2+sNorm) ) 
+       spectrum_v = sqrt( 0.5*abs(spectrum**2-sNorm) ) 
+    end where
     
     nlat = size(field); nn = nlat/2; nnk = size(spectrum); cut = .false.
     if (nn > nnk) then
        print*,"Warning spectrum is smaller than the number of required Fourier modes in 1dGRF.  Additional high frequency modes will not be sampled."
-       cut = .true.
+       cut = .true.  ! Do I need this here?  What is it used for?
     endif
     
     if (.not.seed_init) then
