@@ -318,8 +318,9 @@ contains
   ! Need to fix up the normalization of the Gaussian random deviates
   subroutine generate_1dGRF_cmplx(field, spectrum_u, spectrum_v)
     complex(C_DOUBLE_COMPLEX), dimension(:), intent(inout) :: field
-    real(dl), dimension(:), intent(in) :: spectrum_u, spectrum_v
-
+    real(dl), dimension(:), intent(in) :: spectrum_u
+    real(dl), dimension(1:size(spectrum_u)) :: spectrum_v
+    
     integer :: nlat, nn, nnk
     real(dl) :: amp, phase
     complex(dl) :: deviate

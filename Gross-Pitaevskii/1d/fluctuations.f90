@@ -74,10 +74,8 @@ contains
        call initialise_fluctuations_bogoliubov(fld, params)
     case ('WHITE')
        call initialise_fluctuations_white(fld, params)
-    case ('KG_R')
-       call initialise_fluctuations_kg_real(fld, params)
     case default
-       call initialise_fluctuations_white(fld, params)
+       call initialise_fluctuations_bogoliubov(fld, params)
     end select
   end subroutine initialise_fluctuations
 
@@ -142,7 +140,8 @@ contains
 
     ! Write this to initialise real and imaginary modes directly
   end subroutine initialise_fluctuations_bogoliubov_real_imag
-  
+
+  ! Fix this now that it's broken
   subroutine initialise_fluctuations_white(fld, params)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     type(SpecParams), intent(in) :: params
@@ -280,49 +279,6 @@ contains
 ! More verbose versions of calls, with parameters explicitly listed
 ! This will be deleted eventually.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-  subroutine initialise_fluctuations_kg_long(fld, rho, m2eff, nCut, modes)
-    real(dl), dimension(:,:,:), intent(inout) :: fld
-    real(dl), intent(in) :: rho, m2eff
-    integer, intent(in) :: nCut
-    logical, intent(in), dimension(1:size(fld,dim=3)) :: modes 
-
-    real(dl), dimension(1:size(fld,dim=1),1:2) :: df_rel, df_tot
-    real(dl) :: spec(1:size(fld,dim=1)/2+1)
-    real(dl) :: norm, dk, keff
-    integer :: i,j
-
-    ! Need to remove the len ugliness
-    norm = 1._dl / sqrt(2._dl*len*rho)
-    dk = twopi/len
-
-    df_rel = 0._dl
-    spec = 0._dl
-    do i=2,nLat/2
-       keff = (i-1)*dk
-       spec(i) = 1._dl/sqrt(keff)
-    enddo
-    spec = spec * norm
-    do i = 1,nFld; do j=1,2
-       if (modes(2)) call generate_1dGRF(df_rel(:,j), spec(1:nCut), .false.)
-    enddo; enddo
-
-    df_tot = 0.
-    spec = 0._dl
-    do i=1,nLat/2
-       keff = (i-1)*dk
-       spec(i) = 1._dl / (keff**2+m2eff)**0.25 
-    enddo
-    spec = spec * norm
-    do i=1,nFld; do j=1,2
-       if (modes(1)) call generate_1dGRF(df_tot(:,j), spec(1:nCut), .false.)
-    enddo; enddo
-
-    do j=1,2
-       fld(:,j,1) = fld(:,j,1) + sqrt(0.5_dl)*( df_tot(:,j) + df_rel(:,j) )
-       fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
-    enddo
-  end subroutine initialise_fluctuations_kg_long
 
   subroutine initialise_relative_phase_fluctuations(fld, spec, f1, f2)
     real(dl), dimension(:,:,:), intent(inout) :: fld
