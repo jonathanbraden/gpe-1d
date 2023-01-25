@@ -48,38 +48,38 @@ program Gross_Pitaevskii_1d
   !call time_evolve((1._dl/dble(w_samp))*twopi/omega,100._dl,dble(ds)/dble(w_samp)*twopi/omega)
 
 !#ifdef ALEX
-  n = 128 ! 1024 ! 512
+  n = 1024 ! 1024 ! 512
   nu_gpe = 0.01
   del_gpe = 1.2_dl
   om_gpe = 64./2./sqrt(nu_gpe)  
   len_gpe = 454.65  ! 50./2./sqrt(nu_gpe) 
   w_samp = 16
-  rho_alex = 43.99 !43.99 !43.99 ! This is only really needed for the ICs, not the model setup 
+  rho_alex = 1.e5 ! 43.99 !43.99 !43.99 ! This is only really needed for the ICs, not the model setup 
   phi_init = 0._dl  ! 0.01*twopi
 
   nu_gpe = 0.01
-  del_gpe = 0.
+  del_gpe = 0._dl
   om_gpe = 16.
-  mu = 1.-nu_gpe
+  mu = 1.+nu_gpe
   
   call setup_simulation( 2, n, len_gpe/n, fld, tcur )
   call initialise_model_symmetric( 2, nu_gpe, del_gpe, om_gpe ) ! fix rho, num-field nonlocality
 
   !fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/( .true., i=1,size(fld,dim=3))/), n/2, fv_=.true. )
-  fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/ .true., .true. /), n/8, fv_=.false. )
+  fluc_params = make_spec_params( rho_alex, len_gpe, nu_gpe, del_gpe, 'BOGO', (/ .true., .true. /), n/2, fv_=.false. )
   call print_spec_params(fluc_params)
 
   !!! Sample initial condtions
-  !nSamp = 1000
-  !call sample_ics(nSamp, fluc_params, n, 2)
+  nSamp = 1000
+  call sample_ics(nSamp, fluc_params, n, 2)
 
-  nSamp = 1
+  nSamp = 0
   do i=1,nSamp
      fld = 0._dl
      call initialise_fluctuations(fld, fluc_params)
-     !fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) - 1.
-     fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) + 1.
-     mu = 1.-nu
+     fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) - 1.
+     !fld(:,1,1) = fld(:,1,1) + 1.; fld(:,1,2) = fld(:,1,2) + 1.
+     mu = 1.+nu
   !fld(:,1,1) = cos(0.5*phi_init) + fld(:,1,1); fld(:,2,1) = -sin(0.5*phi_init) + fld(:,2,1)
   !fld(:,1,2) = -cos(0.5*phi_init) + fld(:,1,2); fld(:,2,2) = -sin(0.5*phi_init) + fld(:,2,2)
 
