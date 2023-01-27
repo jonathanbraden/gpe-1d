@@ -50,6 +50,7 @@ contains
   subroutine print_spec_params(params)
     type(SpecParams), intent(in) :: params
 
+    print*,""
     print*,"=========================================="
     print*,"Fluctuation Properties"
     print*,"------------------------------------------"
@@ -61,6 +62,7 @@ contains
     print*,"Number of atoms        : ", params%len * params%rho
     print*,"Cos(\phi_bg)           : ", params%cos_phi
     print*,"==========================================="
+    print*,""
   end subroutine print_spec_params
   
   subroutine initialise_fluctuations(fld, params)
@@ -94,36 +96,37 @@ contains
     real(dl) :: num_atoms
     integer :: nCut
 
-    nCut = params%nCut
+    nCut = params%nCut  ! Could incorporate this into the subroutine variable defs
     lameff = params%lamEff
     nu_ = params%cos_phi * params%nu  ! Make sure I sync this sign correctly below
     m2eff = params%m2eff
     num_atoms = params%num_atoms
     
-    norm = 1._dl / sqrt(2._dl*num_atoms)  ! check factor of 2
+    norm = 1._dl / sqrt(2._dl*num_atoms)  ! check factor of 2 (coincides w/ noise floor choice)
     dk = params%dk
     keff = (/ (dk*(i-1), i=1,size(spec_pos)) /)
 
     spec_pos = 0._dl; spec_neg = 0._dl
     if (params%cos_phi < 0.) then
        spec_neg(2:) = sqrt( (keff(2:)**2+2._dl) / (keff(2:)*sqrt(keff(2:)**2+4._dl)) )
-       spec_pos(2:) = sqrt( (keff(2:)**2 + 2._dl + 4._dl*nu_)  / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )
+       spec_pos(2:) = sqrt( (keff(2:)**2 + 2._dl + 4._dl*nu_)  / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) ) ! Is this correct?
+
     else
-       spec_neg(2:) = sqrt( (keff(2:)**2 + 2._dl + 4._dl*nu_)  / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )
+       spec_neg(2:) = sqrt( (keff(2:)**2 + 2._dl + 4._dl*nu_)  / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )  ! Is this correct?
        spec_pos(2:) = sqrt( (keff(2:)**2+2._dl) / (keff(2:)*sqrt(keff(2:)**2+4._dl)) )
     endif
 
     df_pos = 0._dl
     if (params%modes(1)) then
        call convert_spec_psi_to_u_and_v(spec_pos, spec_u, spec_v, noise_floor_=1._dl)
-       call generate_1dGRF_cmplx(df_pos, spec_u, spec_v)
+       call generate_1dGRF_cmplx(df_pos, spec_u(:nCut), spec_v(:nCut))
        df_pos = df_pos * norm
     endif
     
     df_neg = 0._dl
     if (params%modes(2)) then
        call convert_spec_psi_to_u_and_v(spec_neg, spec_u, spec_v, noise_floor_=1._dl)
-       call generate_1dGRF_cmplx(df_neg, spec_u, spec_v)
+       call generate_1dGRF_cmplx(df_neg, spec_u(:nCut), spec_v(:nCut))
        df_neg = df_neg * norm
     endif
        
