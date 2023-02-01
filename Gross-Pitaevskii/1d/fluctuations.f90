@@ -283,6 +283,67 @@ contains
 ! This will be deleted eventually.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+  subroutine initialise_phase_and_density_fluctuations(fld, params, rho0, phi0)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    type(SpecParams), intent(in) :: params
+    real(dl), intent(in) :: rho0, phi0
+
+    real(dl), dimension(1:size(fld,1)/2+1) :: spec_pos, spec_neg, spec_rho, spec_phase
+    real(dl), dimension(1:size(fld,1)/2+1) :: keff
+    real(dl), dimension(1:size(fld,1)) :: drho_tot, dphase_tot, drho_rel, dphase_rel
+    real(dl) :: norm, dk
+    real(dl) :: m2eff, lameff, nu_
+    integer :: i
+
+    dk = params%dk
+    norm = 1._dl / sqrt(2._dl*params%num_atoms)
+    keff = (/ ((i-1)*dk, i=1,size(spec_pos)) /)
+
+    nu_ = params%cos_phi * params%nu
+    m2eff = params%m2eff
+    lameff = params%lameff
+    
+    ! Grab the total density fluctuations spectrum
+    spec_pos = 0._dl
+    spec_neg = 0._dl
+    
+    if (params%cos_phi < 0.) then
+       spec_neg(2:) = sqrt( (keff(2:)**2+2._dl) / ( keff(2:)*sqrt(keff(2:)**2+4._dl) )
+       spec_pos(2:) = sqrt( (keff(2:)**2 + 2._dl * 4._dl*nu_) / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )  ! Is this correct?  Are the signs correct?
+       
+    else
+       spec_neg(2:) = sqrt( (keff(2:)**2 + 2._dl * 4._dl*nu_) / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) ) ! Is this correct?  Are the signs correct?
+       spec_pos(2:) = sqrt( (keff(2:)**2+2._dl) / ( keff(2:)*sqrt(keff(2:)**2+4._dl) )
+    endif
+
+    ! Convert to real and imaginary spectra
+    if (params%cos_phi < 0.) then
+       call convert_spec_psi_to_real_and_imag(spec_neg, spec_rho, spec_phase, noise_floor_=1.) ! fix noise floor
+    else
+       call convert_spec_psi_to_real_and_image(spec_pos, spec_rho, spec_phase, noise_floor_=1.)
+    endif
+       
+    ! Write down spectrum
+    call generate_1dGRF(drho_tot, spec_rho)
+    call generate_1dGRF(dphase_tot, spec_phase)
+
+    if (params%cos_phi <0.) then
+       call convert_spec_psi_to_real_and_imag(spec_pos, spec_rho, spec_phase, noise_floor_=1.)
+    else
+       call convert_spec_psi_to_real_and_imag(spec_neg, spec_rho, spec_phase, noise_floor_=1.)
+    endif
+
+    call generate_1dGRF(drho_rel, spec_rho)
+    call generate_1dGRF(dphase_rel, spec_rel)
+
+    ! Fix up amplitudes
+    fld(:,1,f1) = sqrt(1.+drho_tot+drho_rel)*cos(0.5*phi0 + dphase_tot + dphase_rel )
+    fld(:,2,f1) = sqrt(1.+drho_tot+drho_rel)*sin(0.5*phi0 + dphase_tot + dphase_rel )
+    fld(:,1,f2) = sqrt(1.+drho_tot-drho_rel)*cos(0.5*phi0 + dphase_tot - dphase_rel )
+    fld(:,2,f2) = sqrt(1.+drho_tot-drho_rel)*sin(-0.5*phi0 + dphase_tot - dphase_rel)
+    
+  end subroutine initialise_phase_and_density_fluctuations
+  
   subroutine initialise_relative_phase_fluctuations(fld, spec, f1, f2)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     real(dl), dimension(:), intent(in) :: spec
