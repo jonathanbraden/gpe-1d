@@ -173,42 +173,100 @@ contains
     deallocate( amp, phase, deviate )
   end subroutine generate_1dGRF
 
+  ! This is completely broken if I initialize the Nyquist mode.
+  ! Build in some checks to avoid this
+  !
+  ! Need to fix up the normalization of the Gaussian random deviates
+  subroutine generate_1dGRF_cmplx(field, spectrum_u, spectrum_v)
+    complex(C_DOUBLE_COMPLEX), dimension(:), intent(inout) :: field
+    real(dl), dimension(:), intent(in) :: spectrum_u
+    real(dl), dimension(1:size(spectrum_u)) :: spectrum_v
+    
+    integer :: nlat, nn, nnk
+    real(dl) :: amp, phase
+    complex(dl) :: deviate
+    complex(C_DOUBLE_COMPLEX) :: Fk_u(1:size(field)), Fk_v(1:size(field))
+    complex(C_DOUBLE_COMPLEX) :: Fk(1:size(field)), fld_tmp(1:size(field))
+    type(C_PTR) :: fft_plan
 
+    real(dl) :: sNorm
+    
+    integer :: i, ii, ic
+    
+    nlat = size(field); nn = nlat/2; nnk = size(spectrum_u)
+    if (nn > nnk) then
+       print*,"WARNING: Spectrum in generate_1dGRF_cmplx is less than number of modes.  Missing high frequency modes are not be sampled."
+    endif
+    
+    if (.not.seed_init) then
+       print*,"WARNING: Random number generator not initialized.  Call initialize_rand, using default seed values"
+       call initialize_rand(75,13)
+    endif
+    
+    fft_plan = fftw_plan_dft_1d(nlat, Fk, fld_tmp, FFTW_BACKWARD, FFTW_ESTIMATE)
+    
+    Fk_u = 0.
+    Fk_v = 0.
+    do i=2,nnk        ! Check these bounds are correct
+       ic = nlat+2-i  ! This should give the negative wavenumber. Add mod if needed
+       
+       call random_number(amp); call random_number(phase)
+       deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
+       Fk_u(i)  = deviate*spectrum_u(i)
+       Fk_v(ic) = -conjg(deviate)*spectrum_v(i)
+
+       call random_number(amp); call random_number(phase)
+       deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
+       Fk_u(ic)  = deviate*spectrum_u(i)
+       Fk_v(i) = -conjg(deviate)*spectrum_v(i)
+    enddo
+
+    Fk = Fk_u
+    call fftw_execute_dft(fft_plan, Fk, fld_tmp)
+    field = fld_tmp
+    Fk = Fk_v
+    call fftw_execute_dft(fft_plan, Fk, fld_tmp)
+    field = field + fld_tmp
+  end subroutine generate_1dGRF_cmplx
+  
   !> @brief
-  !> Generate two 1D GRF with specified (k-dependent) cross-correlation
+  !> Generate a realization of real GRF with specified (k-dependent) covariance matrix.
   !>
-  !> Produce a pair of Gaussian random fields with specified (k-dependent) covariance matrix.
+  !> Produce a set of Gaussian random fields with specified (k-dependent) covariance matrix.
   !> This allows for correlations between the two fields initially.
   !> The fields are returned as the real and imaginary parts of a complex array
   !>
   !> @todo
   !> @arg Actually implement this
   !> @arg Fill in the documentation once this is done
-  subroutine generate_correlated_1dGRF(fields, spec, corr)
-    complex(C_DOUBLE_COMPLEX), intent(inout), dimension(:) :: fields
-    real(dl), intent(in) :: spec(1:2), corr
+  subroutine generate_correlated_1dGRF(fields, cov, cholesky)
+    real(C_DOUBLE), intent(inout), dimension(:,:) :: fields
+    real(dl), intent(in) :: cov
+    logical, intent(in) :: cholesky
 
-    real(dl), allocatable, dimension(:) :: amp, phase
-    complex(C_DOUBLE_COMPLEX), allocatable, dimension(:) :: deviate
+    real(dl), dimension(1:size(fields,dim=1)) :: amp, phase
+    complex(C_DOUBLE_COMPLEX), dimension(1:size(fields,dim=1)) :: deviate
     type(C_PTR) :: plan_inv
     integer :: n
 
-    n = size(fields)
+    n = size(fields, dim=1)
 
     if (.not.seed_init) then
        print*,"Error, random number generator not initialized.  Calling initialize_rand, using default seed values"
        call initialize_rand(75,13)
     endif
 
-    allocate(amp(1:n),phase(1:n),deviate(1:n))
+    if (cholesky) then
+       !DPSTRF or DPSTF2
+    else
+       !DGEEV or use symmetric matrix
+    endif
+   
 
     call random_number(amp(1:n))
     call random_number(phase(1:n))
     deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
 
-    fields = deviate
-! Hmm, I don't think this works the way I want it to...
-!    fields = dreal(deviate)*spec(:,1) + iImag*dimag(deviate)*spec(:,2)
   end subroutine generate_correlated_1dGRF
 
 #ifdef TESTING
@@ -312,60 +370,4 @@ contains
     deallocate(seeds)
   end subroutine initialize_rand
 
-  ! This is completely broken if I initialize the Nyquist mode.
-  ! Build in some checks to avoid this
-  !
-  ! Need to fix up the normalization of the Gaussian random deviates
-  subroutine generate_1dGRF_cmplx(field, spectrum_u, spectrum_v)
-    complex(C_DOUBLE_COMPLEX), dimension(:), intent(inout) :: field
-    real(dl), dimension(:), intent(in) :: spectrum_u
-    real(dl), dimension(1:size(spectrum_u)) :: spectrum_v
-    
-    integer :: nlat, nn, nnk
-    real(dl) :: amp, phase
-    complex(dl) :: deviate
-    complex(C_DOUBLE_COMPLEX) :: Fk_u(1:size(field)), Fk_v(1:size(field))
-    complex(C_DOUBLE_COMPLEX) :: Fk(1:size(field)), fld_tmp(1:size(field))
-    type(C_PTR) :: fft_plan
-
-    real(dl) :: sNorm
-    
-    integer :: i, ii, ic
-    
-    nlat = size(field); nn = nlat/2; nnk = size(spectrum_u)
-    if (nn > nnk) then
-       print*,"WARNING: Spectrum in generate_1dGRF_cmplx is less than number of modes.  Missing high frequency modes are not be sampled."
-    endif
-    
-    if (.not.seed_init) then
-       print*,"WARNING: Random number generator not initialized.  Call initialize_rand, using default seed values"
-       call initialize_rand(75,13)
-    endif
-    
-    fft_plan = fftw_plan_dft_1d(nlat, Fk, fld_tmp, FFTW_BACKWARD, FFTW_ESTIMATE)
-    
-    Fk_u = 0.
-    Fk_v = 0.
-    do i=2,nnk        ! Check these bounds are correct
-       ic = nlat+2-i  ! This should give the negative wavenumber. Add mod if needed
-       
-       call random_number(amp); call random_number(phase)
-       deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
-       Fk_u(i)  = deviate*spectrum_u(i)
-       Fk_v(ic) = -conjg(deviate)*spectrum_v(i)
-
-       call random_number(amp); call random_number(phase)
-       deviate = sqrt(-log(amp))*exp(iImag*twopi*phase)
-       Fk_u(ic)  = deviate*spectrum_u(i)
-       Fk_v(i) = -conjg(deviate)*spectrum_v(i)
-    enddo
-
-    Fk = Fk_u
-    call fftw_execute_dft(fft_plan, Fk, fld_tmp)
-    field = fld_tmp
-    Fk = Fk_v
-    call fftw_execute_dft(fft_plan, Fk, fld_tmp)
-    field = field + fld_tmp
-  end subroutine generate_1dGRF_cmplx
-  
 end module gaussianRandomField

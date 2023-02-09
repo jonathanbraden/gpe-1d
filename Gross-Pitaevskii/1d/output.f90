@@ -31,6 +31,7 @@ contains
     character(80) :: fn
     integer, save :: oFile
     logical :: o
+    real(dl) :: en
 
     fn = 'log.out'
     if (present(fName)) fn = trim(fName)
@@ -40,7 +41,9 @@ contains
        open(unit=newunit(oFile), file=trim(fn))
        call write_header(oFile, dt)
     endif
-    write(oFile,*) t, 2.*sqrt(nu)*t, sum(fld**2)/size(fld,dim=1)
+
+    en = compute_total_energy(fld)
+    write(oFile,*) t, 2.*sqrt(nu)*t, sum(fld**2)/size(fld,dim=1), en
     
   end subroutine output_log_file
   

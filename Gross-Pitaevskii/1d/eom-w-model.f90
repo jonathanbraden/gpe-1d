@@ -276,9 +276,77 @@ contains
     rho = rho + tPair%realSpace(:)
 #endif
 #endif
-!    rho = rho + 0.5_dl*lam(1,1)*(yc(R1)**1+yc(I1)**2)**2 + 0.5_dl*lam(2,2)*(yc(R2)**2+yc(I2)**2)**2 + lam(1,2)*(yc(R1)**2+yc(I1)**2)*(yc(R2)**2+yc(I2)**2) - 2._dl*nu*(yc(R1)*yc(R2)+yc(I1)*yc(I2))
+    !rho = rho + 0.5_dl*lam(1,1)*(yc(R1)**1+yc(I1)**2)**2 + 0.5_dl*lam(2,2)*(yc(R2)**2+yc(I2)**2)**2 + lam(1,2)*(yc(R1)**2+yc(I1)**2)*(yc(R2)**2+yc(I2)**2) - 2._dl*nu*(yc(R1)*yc(R2)+yc(I1)*yc(I2))
   end subroutine compute_energy
 
+  ! This needs to be optimized
+  real(dl) function compute_total_energy(fld) result(en)
+    real(dl), dimension(:,:,:), intent(in) :: fld
+
+    integer :: nfld
+    integer :: i,j
+
+    nfld = size(fld,dim=3)
+    en = 0._dl
+#ifdef DIFF
+#ifdef DISCRETE
+#endif
+#ifdef FOURIER_DIFF
+    do i=1,nfld
+       do j=1,2  ! Real and complex components
+          tPair%realSpace(:) = fld(:,j,i)
+          call laplacian_1d_wtype(tPair,dk)
+          en = en - 0.5_dl*sum(fld(:,j,i)*tPair%realSpace)
+          !call gradsquared_1d_wtype(tPair,dk)
+          !en = en + 0.5_dl*sum(tPair%realSpace)
+       enddo
+    enddo
+#endif
+#endif
+    do i=1,nfld
+       do j=1,nfld
+          en = en + 0.5_dl*lam(i,j)*sum( (fld(:,1,i)**2+fld(:,2,i)**2)*(fld(:,1,j)**2+fld(:,2,j)**2) )
+       enddo
+    enddo
+
+    do i=1,nfld
+       do j=1,nfld
+          en = en - nu*sum( fld(:,1,i)*fld(:,1,j) + fld(:,2,i)*fld(:,2,j) )
+       enddo
+    enddo
+
+    en = en / size(fld,dim=1)
+  end function compute_total_energy
+
+  real(dl) function compute_grad_energy(fld) result(ge)
+    real(dl), dimension(:,:,:), intent(in) :: fld
+
+    integer :: i,j
+
+    ge = 0._dl
+    do i=1,2
+       do j=1,2
+          tPair%realSpace(:) = fld(:,j,i)
+          call gradsquared_1d_wtype(tPair,dk)
+          ge = ge + 0.5_dl*sum(tPair%realSpace)
+       enddo
+    enddo
+  end function compute_grad_energy
+
+  real(dl) function compute_scattering_energy(fld) result(pe)
+    real(dl), dimension(:,:,:), intent(in) :: fld
+
+    integer :: nfld, i, j
+
+    nfld = size(fld,dim=3)
+    pe = 0._dl
+    do i=1,nfld
+       do j=1,nfld
+          pe = pe + 0.5_dl*lam(i,j)*sum( (fld(:,1,i)**2+fld(:,2,i)**2)*fld(:,1,j)**2+fld(:,2,j)**2 )
+       enddo
+    enddo
+  end function compute_scattering_energy
+  
   real(dl) function compute_total_density(fld) result(rho)
     real(dl), dimension(:,:,:), intent(in) :: fld
     rho = sum(fld**2) / size(fld,dim=1)

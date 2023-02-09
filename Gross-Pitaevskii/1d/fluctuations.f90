@@ -11,7 +11,7 @@ module Fluctuations
   type SpecParams
      real(dl) :: cos_phi, dk
      real(dl) :: m2eff, nu, lamEff
-     integer :: num_atoms
+     real(dl) :: num_atoms
      integer :: nCut = 1
      character(8) :: type = 'BOGO'
      logical, dimension(2) :: modes = (/.true.,.true./) ! Update for nFlds
@@ -45,6 +45,7 @@ contains
     params%type = trim(type)
     params%modes(1:2) = modes(1:2)
     params%dk = twopi / len
+    params%num_atoms = rho*len
   end function make_spec_params
 
   subroutine print_spec_params(params)
@@ -76,6 +77,10 @@ contains
        call initialise_fluctuations_bogoliubov(fld, params)
     case ('WHITE')
        call initialise_fluctuations_white(fld, params)
+    case ('BOGO_DP')
+       call initialise_fluctuations_phase_and_density_bogoliubov(fld, params, 1._dl, 0._dl)
+    case ('KG_DP')
+       call initialise_fluctuations_phase_and_density_kg(fld, params, 1._dl, 0._dl)
     case default
        call initialise_fluctuations_bogoliubov(fld, params)
     end select
@@ -109,6 +114,31 @@ contains
        spec(2:nCut) = sqrt( (keff(2:nCut)**2+2._dl) / ( keff(2:nCut)*sqrt(keff(2:nCut)**2+4._dl) ) )
     endif
   end subroutine spectrum_bogoliubov
+
+  subroutine spectrum_kg(spec, params, is_relative)
+    real(dl), dimension(:), intent(out) :: spec
+    type(SpecParams), intent(in) :: params
+    logical, intent(in) :: is_relative
+
+    real(dl), dimension(1:size(spec)) :: keff
+    real(dl) :: dk, norm
+    real(dl) :: m2eff
+    integer :: i, nCut
+
+    nCut = params%nCut
+    dk = params%dk
+    norm = 1._dl / sqrt(2.*params%num_atoms)
+    
+    keff = (/ ((i-1)*dk, i=1,size(keff)) /)
+    spec = 0._dl
+    if (is_relative) then
+       spec(2:nCut) = 1._dl / sqrt( keff(2:nCut)**2+m2eff)
+    else
+       spec(2:nCut) = 1._dl / sqrt(keff(2:nCut))
+    endif
+  end subroutine spectrum_kg
+
+  ! Add subroutine to take the k->0 limit, including the overall normalization different
   
   subroutine initialise_fluctuations_bogoliubov(fld, params)
     real(dl), dimension(:,:,:), intent(inout) :: fld
@@ -116,6 +146,7 @@ contains
 
     complex(dl), dimension(1:size(fld,dim=1)) :: df_pos, df_neg
     real(dl), dimension(1:size(fld,dim=1)/2+1) :: spec_neg, spec_pos  ! Adjust size
+    real(dl), dimension(1:size(fld,dim=1)/2+1) :: spec_tot, spec_rel
     real(dl), dimension(1:size(fld,dim=1)/2+1) :: spec_u, spec_v      ! Adjust size
     real(dl), dimension(1:size(fld,dim=1)/2+1) :: keff               ! Adjust size
     integer :: i,j
@@ -135,14 +166,16 @@ contains
     dk = params%dk
     keff = (/ (dk*(i-1), i=1,size(spec_pos)) /)
 
-    spec_pos = 0._dl; spec_neg = 0._dl
-    if (params%cos_phi < 0.) then
-       spec_neg(2:) = sqrt( (keff(2:)**2+2._dl) / (keff(2:)*sqrt(keff(2:)**2+4._dl)) )
-       spec_pos(2:) = sqrt( (keff(2:)**2 + 2._dl + 4._dl*nu_)  / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) ) ! Is this correct?
+    spec_tot = 0._dl; spec_rel = 0._dl
+    spec_tot = sqrt( (keff(2:)**2+2._dl) / (keff(2:)*sqrt(keff(2:)**2+4._dl)) )
+    spec_rel = sqrt( (keff(2:)**2+2._dl+4._dl*nu_) / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )
 
+    if (params%cos_phi < 0.) then
+       spec_neg(:) = spec_tot(:)
+       spec_pos(:) = spec_rel(:)
     else
-       spec_neg(2:) = sqrt( (keff(2:)**2 + 2._dl + 4._dl*nu_)  / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )  ! Is this correct?
-       spec_pos(2:) = sqrt( (keff(2:)**2+2._dl) / (keff(2:)*sqrt(keff(2:)**2+4._dl)) )
+       spec_pos(:) = spec_tot(:) 
+       spec_neg(:) = spec_rel(:)
     endif
 
     df_pos = 0._dl
@@ -151,14 +184,16 @@ contains
        call generate_1dGRF_cmplx(df_pos, spec_u(:nCut), spec_v(:nCut))
        df_pos = df_pos * norm
     endif
-    
+
     df_neg = 0._dl
     if (params%modes(2)) then
        call convert_spec_psi_to_u_and_v(spec_neg, spec_u, spec_v, noise_floor_=1._dl)
        call generate_1dGRF_cmplx(df_neg, spec_u(:nCut), spec_v(:nCut))
        df_neg = df_neg * norm
     endif
-       
+
+    ! Patch these up to use cos_phi for the sign
+    ! This will simplify the logic above
     fld(:,1,1) = fld(:,1,1) + sqrt(0.5_dl)*( real(df_pos) + real(df_neg) )
     fld(:,1,2) = fld(:,1,2) + sqrt(0.5_dl)*( real(df_pos) - real(df_neg) )
     fld(:,2,1) = fld(:,2,1) + sqrt(0.5_dl)*( aimag(df_pos) + aimag(df_neg) )
@@ -166,11 +201,11 @@ contains
    
   end subroutine initialise_fluctuations_bogoliubov
 
+  ! This one is redundant.  The KG one isn't
+  ! However, I should write this regardless
   subroutine initialise_fluctuations_bogoliubov_real_imag(fld, params)
     real(dl), dimension(:,:,:), intent(inout) :: fld
-    type(SpecParams), intent(in) :: params
-
-    ! Write this to initialise real and imaginary modes directly
+    type(SpecParams), intent(in) :: params   
   end subroutine initialise_fluctuations_bogoliubov_real_imag
 
   ! Fix this now that it's broken
@@ -257,62 +292,40 @@ contains
     fld(:,1,1) = fld(:,1,1) + sqrt(0.5_dl)*( real(df_pos) + real(df_neg) ) 
     fld(:,2,2) = fld(:,2,2) + sqrt(0.5_dl)*( aimag(df_pos) - aimag(df_neg) )
   end subroutine initialise_fluctuations_kg
-  
-  subroutine initialise_fluctuations_kg_real(fld, params)
-    real(dl), dimension(:,:,:), intent(inout) :: fld
-    type(SpecParams) :: params
-
-    real(dl), dimension(1:size(fld,dim=1),1:2) :: df_rel, df_tot
-    real(dl) :: spec(1:size(fld,dim=1)/2+1)
-    real(dl) :: m2eff, dk, keff, norm
-    integer :: nCut, i,j
-    logical, dimension(2) :: modes
-    real(dl) :: len, num_atoms
-
-    len = params%len
-    num_atoms = params%len * params%rho
-    
-    modes(1:2) = params%modes(1:2)    
-    m2eff = params%m2eff
-    nCut = params%nCut
-    
-    norm = 1._dl / sqrt(2._dl*num_atoms)
-    dk = twopi/len
-
-    df_rel = 0._dl
-    spec = 0._dl
-    do i=2,nLat/2
-       keff = (i-1)*dk
-       spec(i) = 1._dl/sqrt(keff)
-    enddo
-    spec = spec * norm
-    do j=1,2
-       if (modes(2)) call generate_1dGRF(df_rel(:,j), spec(1:nCut), .false.)
-    enddo
-
-    df_tot = 0.
-    spec = 0._dl
-    do i=1,nLat/2
-       keff = (i-1)*dk
-       spec(i) = 1._dl / (keff**2+m2eff)**0.25 
-    enddo
-    spec = spec * norm
-    do j=1,2
-       if (modes(1)) call generate_1dGRF(df_tot(:,j), spec(1:nCut), .false.)
-    enddo
-
-    do j=1,2
-       fld(:,j,1) = fld(:,j,1) + sqrt(0.5_dl)*( df_tot(:,j) + df_rel(:,j) )
-       fld(:,j,2) = fld(:,j,2) + sqrt(0.5_dl)*( df_tot(:,j) - df_rel(:,j) )
-    enddo
-  end subroutine initialise_fluctuations_kg_real
     
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! More verbose versions of calls, with parameters explicitly listed
 ! This will be deleted eventually.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  subroutine initialise_phase_and_density_fluctuations(fld, params, rho0, phi0)
+  ! Debug this and clean it up
+  subroutine initialise_fluctuations_phase_and_density(fld, spec_rel, spec_tot, norm, nf, phi0, rho0)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    real(dl), dimension(:), intent(in) :: spec_rel, spec_tot
+    real(dl), intent(in) :: norm, nf, rho0, phi0
+
+    real(dl), dimension(1:size(fld,1)) :: drho_tot, dphase_tot, drho_rel, dphase_rel
+    real(dl), dimension(1:size(spec_rel)) :: spec_rho, spec_phase
+    
+    call convert_spec_psi_to_real_and_imag(spec_tot, spec_rho, spec_phase, noise_floor_=nf)
+    call generate_1dGRF(drho_tot, spec_rho, .false.)
+    call generate_1dGRF(dphase_tot, spec_phase, .false.)
+    drho_tot = drho_tot*norm
+    dphase_tot = dphase_tot*norm
+    
+    call convert_spec_psi_to_real_and_imag(spec_rel, spec_rho, spec_phase, noise_floor_=nf)
+    call generate_1dGRF(drho_rel, spec_rho, .false.)
+    call generate_1dGRF(dphase_rel, spec_phase, .false.)
+    drho_rel = drho_rel*norm
+    dphase_rel = dphase_rel*norm
+    
+    fld(:,1,1) = sqrt(1.+drho_tot-drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) )
+    fld(:,2,1) = sqrt(1.+drho_tot-drho_rel)*sin(-0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) )
+    fld(:,1,2) = sqrt(1.+drho_tot+drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) )  ! check signs
+    fld(:,2,2) = sqrt(1.+drho_tot+drho_rel)*sin(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) ) ! check signs
+  end subroutine initialise_fluctuations_phase_and_density
+  
+  subroutine initialise_fluctuations_phase_and_density_bogoliubov(fld, params, rho0, phi0)
     real(dl), dimension(:,:,:), intent(inout) :: fld
     type(SpecParams), intent(in) :: params
     real(dl), intent(in) :: rho0, phi0
@@ -336,35 +349,129 @@ contains
 
     ! Add nCut, etc. in here.
     ! Even better, write external subroutine to calculate the spectrum, since I do it multiple times
-    
-    ! Grab the total density fluctuations spectrum
     spec_rel = 0._dl
     spec_tot = 0._dl
     
     spec_tot(2:) = sqrt( (keff(2:)**2+2._dl) / ( keff(2:)*sqrt(keff(2:)**2+4._dl) ) )
-    spec_rel(2:) = sqrt( (keff(2:)**2 + 2._dl * 4._dl*nu_) / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) ) ! Check this is correct
-    
-    call convert_spec_psi_to_real_and_imag(spec_tot, spec_rho, spec_phase, noise_floor_=1.) ! Check noise floor norm
-    call generate_1dGRF(drho_tot, spec_rho, .false.)
-    call generate_1dGRF(dphase_tot, spec_phase, .false.)
+    spec_rel(2:) = sqrt( (keff(2:)**2 + 2._dl + 4._dl*nu_) / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )
 
-    call convert_spec_psi_to_real_and_imag(spec_rel, spec_rho, spec_phase, noise_floor_=1.) ! Check noise floor norm
-    call generate_1dGRF(drho_rel, spec_rho, .false.)
-    call generate_1dGRF(dphase_rel, spec_rel, .false.)
+    if (params%modes(1)) then
+       call convert_spec_psi_to_real_and_imag(spec_tot, spec_rho, spec_phase, noise_floor_=1.) ! Check noise floor norm
+       call generate_1dGRF(drho_tot, spec_rho, .false.)
+       call generate_1dGRF(dphase_tot, spec_phase, .false.)
+    else
+       drho_tot = 0._dl
+       dphase_tot = 0._dl
+    endif
+
+    if (params%modes(2)) then
+       call convert_spec_psi_to_real_and_imag(spec_rel, spec_rho, spec_phase, noise_floor_=1.) ! Check noise floor norm
+       call generate_1dGRF(drho_rel, spec_rho, .false.)
+       call generate_1dGRF(dphase_rel, spec_phase, .false.)
+    else
+       drho_rel = 0._dl
+       dphase_rel = 0._dl
+    endif
+    
+    drho_tot = drho_tot*norm
+    dphase_tot = dphase_tot*norm
+    drho_rel = drho_rel*norm
+    dphase_rel = dphase_rel*norm
+
+    ! An option here is to subtract off the mean field (if it exists), then add it back on later?
+    fld(:,1,1) = sqrt(1.+drho_tot-drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) ) 
+    fld(:,2,1) = sqrt(1.+drho_tot-drho_rel)*sin(-0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) )
+    fld(:,1,2) = sqrt(1.+drho_tot+drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) )  ! check signs
+    fld(:,2,2) = sqrt(1.+drho_tot+drho_rel)*sin(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) ) ! check signs
+
+  end subroutine initialise_fluctuations_phase_and_density_bogoliubov
+
+  ! Copy the Bogoliubov above for the Klein-Gordon, but put in spectra explicitly so I can cut them off at high-k
+  subroutine initialise_fluctuations_phase_and_density_kg(fld, params, rho0, phi0)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    type(SpecParams), intent(in) :: params
+    real(dl), intent(in) :: rho0, phi0
+
+    real(dl), dimension(1:size(fld,1)/2+1) :: spec_rho, spec_phase
+    real(dl), dimension(1:size(fld,1)/2+1) :: keff
+    real(dl), dimension(1:size(fld,1)) :: drho_tot, dphase_tot, drho_rel, dphase_rel
+    real(dl) :: norm, dk
+    real(dl) :: m2eff, nu_
+    integer :: i
+
+    dk = params%dk
+    norm = 1._dl / sqrt(2._dl*params%num_atoms)
+    keff = (/ ((i-1)*dk, i=1,size(keff)) /)
+
+    nu_ = params%cos_phi * params%nu
+    m2eff = params%m2eff
+
+    if (params%modes(1)) then
+       spec_rho = 0.
+       spec_rho(2:) = keff(2:)
+       spec_phase = 0.
+       spec_phase(2:) = 1._dl/keff(2:)
+       call generate_1dGRF(drho_tot, spec_rho, .false.)
+       call generate_1dGRF(dphase_tot, spec_phase, .false.)
+    else
+       drho_tot = 0._dl
+       dphase_tot = 0._dl
+    endif
+
+    ! Check these
+    ! Also, compare normalization between different sims
+    if (params%modes(2)) then
+       spec_rho = 0._dl
+       spec_rho(2:) = sqrt(keff(2:)**2+m2eff)
+       spec_phase = 0._dl
+       spec_phase(2:) = 1./sqrt(keff(2:)**2+m2eff)
+       call generate_1dGRF(drho_rel, spec_rho, .false.)
+       call generate_1dGRF(dphase_rel, spec_phase, .false.)
+    else
+       drho_rel = 0._dl
+       dphase_rel = 0._dl
+    endif
 
     drho_tot = drho_tot*norm
     dphase_tot = dphase_tot*norm
     drho_rel = drho_rel*norm
     dphase_rel = dphase_rel*norm
-    
-    ! Fix up amplitudes
-    fld(:,1,1) = sqrt(1.+drho_tot-drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) )
+
+    ! An option here is to subtract off the mean field (if it exists), then add it back on later?
+    fld(:,1,1) = sqrt(1.+drho_tot-drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) ) 
     fld(:,2,1) = sqrt(1.+drho_tot-drho_rel)*sin(-0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) )
     fld(:,1,2) = sqrt(1.+drho_tot+drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) )  ! check signs
     fld(:,2,2) = sqrt(1.+drho_tot+drho_rel)*sin(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) ) ! check signs
     
-  end subroutine initialise_phase_and_density_fluctuations
+  end subroutine initialise_fluctuations_phase_and_density_kg
 
+  subroutine initialise_fluctuations_real_and_imaginary_bogoliubov(fld, params)
+    real(dl), dimension(:,:,:), intent(inout) :: fld
+    type(SpecParams), intent(in) :: params
+    
+    real(dl), dimension(1:params%nCut) :: spec, spec_re, spec_im
+    real(dl), dimension(1:size(fld,1)) :: psi_tot_re, psi_tot_im, psi_rel_re, psi_rel_im
+    
+    ! Use call to Bogoliubov spectrum here
+
+    if ( params%modes(1) ) then
+       ! Call the spectrum here
+       spec_re = 0._dl
+       spec_im = 0._dl
+       call generate_1dGRF(psi_tot_re, spec_re, .false.)
+       call generate_1dGRF(psi_tot_im, spec_im, .false.)
+    endif
+    
+    if ( params%modes(2) ) then
+       ! Call to get spectrum
+       spec_re = 0._dl
+       spec_im = 0._dl
+       call generate_1dGRF(psi_rel_re, spec_re, .false.)
+       call generate_1dGRF(psi_rel_im, spec_im, .false.)
+    endif    
+  end subroutine initialise_fluctuations_real_and_imaginary_bogoliubov
+  
+  
   !>@brief
   !> Converts a spectrum for $\psi^2$ into separate u and v spectra.
   !> Assumes the "quantum noise" lower bound on the spectrum is 1/2
@@ -392,9 +499,15 @@ contains
 
     noise_floor = 0.5_dl; if (present(noise_floor_)) noise_floor=noise_floor_
 
+    !print*,"Noise floor is ",noise_floor
     ! Check normalisation on these, and also sign
-    spec_r = sqrt(spec**2 + noise_floor) - sqrt(spec**2-noise_floor)
-    spec_i = sqrt(spec**2 + noise_floor) + sqrt(spec**2-noise_floor) 
+    spec_r = 0._dl; spec_i = 0._dl
+
+    ! Improve this to explicitly ignore the zero mode
+    where (spec**2>noise_floor)
+       spec_r = sqrt(spec**2 + noise_floor) - sqrt(spec**2-noise_floor)
+       spec_i = sqrt(spec**2 + noise_floor) + sqrt(spec**2-noise_floor)
+    end where
   end subroutine convert_spec_psi_to_real_and_imag
   
 end Module Fluctuations
