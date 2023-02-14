@@ -78,7 +78,7 @@ contains
     case ('WHITE')
        call initialise_fluctuations_white(fld, params)
     case ('BOGO_DP')
-       call initialise_fluctuations_phase_and_density_bogoliubov(fld, params, 1._dl, 0._dl)
+       call initialise_fluctuations_phase_and_density_bogoliubov(fld, params, 1._dl, 0.5_dl*twopi)
     case ('KG_DP')
        call initialise_fluctuations_phase_and_density_kg(fld, params, 1._dl, 0._dl)
     case default
@@ -167,8 +167,8 @@ contains
     keff = (/ (dk*(i-1), i=1,size(spec_pos)) /)
 
     spec_tot = 0._dl; spec_rel = 0._dl
-    spec_tot = sqrt( (keff(2:)**2+2._dl) / (keff(2:)*sqrt(keff(2:)**2+4._dl)) )
-    spec_rel = sqrt( (keff(2:)**2+2._dl+4._dl*nu_) / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )
+    spec_tot(2:) = sqrt( (keff(2:)**2+2._dl) / (keff(2:)*sqrt(keff(2:)**2+4._dl)) )
+    spec_rel(2:) = sqrt( (keff(2:)**2+2._dl+4._dl*nu_) / sqrt(keff(2:)**2+m2eff) / sqrt(keff(2:)**2+4._dl+4._dl*nu_*(lameff**2+1._dl)) )
 
     if (params%cos_phi < 0.) then
        spec_neg(:) = spec_tot(:)
@@ -337,7 +337,6 @@ contains
     real(dl) :: m2eff, lameff, nu_
     integer :: i
 
-
     ! I haven't put the norm in here correctly yet.
     dk = params%dk
     norm = 1._dl / sqrt(2._dl*params%num_atoms)
@@ -377,9 +376,9 @@ contains
     dphase_tot = dphase_tot*norm
     drho_rel = drho_rel*norm
     dphase_rel = dphase_rel*norm
-
+   
     ! An option here is to subtract off the mean field (if it exists), then add it back on later?
-    fld(:,1,1) = sqrt(1.+drho_tot-drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) ) 
+    fld(:,1,1) = sqrt(1.+drho_tot-drho_rel)*cos(-0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) ) 
     fld(:,2,1) = sqrt(1.+drho_tot-drho_rel)*sin(-0.5*phi0 + 0.5_dl*(dphase_tot - dphase_rel) )
     fld(:,1,2) = sqrt(1.+drho_tot+drho_rel)*cos(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) )  ! check signs
     fld(:,2,2) = sqrt(1.+drho_tot+drho_rel)*sin(0.5*phi0 + 0.5_dl*(dphase_tot + dphase_rel) ) ! check signs
